@@ -91,7 +91,11 @@ Attack tests (example coin, seed 59, EJECT on day 34):
 
 Model limits: simplified trader behavior, no sniper bots, the baseline exit race is assumed at day 60. In reality many holders of dead coins never sell and lose 100%, so the model likely understates the benefit.
 
-## 6. Worked example (use it as a unit test, see M2)
+## 6. Economic note: early buyers gain from the pro-rata split
+
+The reserve is split pro-rata by tokens at EJECT. Early buyers got more tokens per NEAR on the curve, so they receive more than they paid, while late buyers lose part of their money. Example from the sandbox test: Ani bought 5 NEAR first and claimed 7.52 NEAR, Budi bought 8 NEAR later and claimed 6.03 NEAR. This is the nature of a bonding curve, not a bug. The honest pitch: Ejecto removes the exit race and total wipeouts, and pays loyal holders a fund share. It does not make everyone profitable.
+
+## 7. Worked example (use it as a unit test, see M2)
 
 EJECT happens with a curve reserve of 60 NEAR for 600k tokens and an Ejecto Fund of 10 NEAR.
 
@@ -103,11 +107,11 @@ EJECT happens with a curve reserve of 60 NEAR for 600k tokens and an Ejecto Fund
 
 Cici's weight: 20 NEAR for 3 days (60) plus 5 NEAR for 25 days (125).
 
-## 7. Legal note
+## 8. Legal note
 
 The SEC staff statement of 2025-02-27 says typical memecoins are not securities. It is not binding and does not cover refund mechanisms. Ejecto promises no profit, and the fund is distributed by code. Get legal review before any mainnet launch.
 
-## 8. Sources
+## 9. Sources
 
 - Hackathon: https://nearhackathon.com, https://nearhackathon.com/HACKATHON.md, https://github.com/nearai/near-hackathon-prompt-examples
 - Past winners: https://1t-agents.devpost.com/project-gallery, https://redacted.devpost.com/project-gallery, https://nearcon.org
