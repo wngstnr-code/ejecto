@@ -127,6 +127,19 @@ impl Factory {
             !self.by_symbol.contains_key(&symbol),
             "Symbol already taken"
         );
+        // Same rules as the coin's `new`. Checking here makes bad input fail synchronously,
+        // so the deposit is refunded by the runtime instead of by the async callback.
+        require!(
+            !name.is_empty() && name.chars().count() <= 32,
+            "name must be 1 to 32 characters"
+        );
+        if let Some(i) = &icon {
+            require!(i.len() <= 2048, "icon must be at most 2 KB");
+        }
+        require!(
+            (10..=86_400).contains(&day_length_sec),
+            "day_length_sec must be between 10 and 86400"
+        );
         let code = self
             .coin_code
             .get()
@@ -334,6 +347,45 @@ mod tests {
         ctx("ani.ejecto.testnet", 3 * NEAR, vec![]);
         f.create_coin("Seato".into(), "seato".into(), None, "free".into(), 10)
             .detach();
+    }
+
+    #[test]
+    #[should_panic(expected = "name must be")]
+    fn create_bad_name_panics() {
+        let mut f = setup();
+        ctx("ejecto.testnet", 0, fake_wasm());
+        f.set_coin_code();
+        ctx("ani.ejecto.testnet", 3 * NEAR, vec![]);
+        f.create_coin("".into(), "seato".into(), None, "standard".into(), 10)
+            .detach();
+    }
+
+    #[test]
+    #[should_panic(expected = "day_length_sec")]
+    fn create_bad_day_length_panics() {
+        let mut f = setup();
+        ctx("ejecto.testnet", 0, fake_wasm());
+        f.set_coin_code();
+        ctx("ani.ejecto.testnet", 3 * NEAR, vec![]);
+        f.create_coin("Seato".into(), "seato".into(), None, "standard".into(), 5)
+            .detach();
+    }
+
+    #[test]
+    #[should_panic(expected = "icon must be")]
+    fn create_big_icon_panics() {
+        let mut f = setup();
+        ctx("ejecto.testnet", 0, fake_wasm());
+        f.set_coin_code();
+        ctx("ani.ejecto.testnet", 3 * NEAR, vec![]);
+        f.create_coin(
+            "Seato".into(),
+            "seato".into(),
+            Some("x".repeat(3000)),
+            "standard".into(),
+            10,
+        )
+        .detach();
     }
 
     #[test]
