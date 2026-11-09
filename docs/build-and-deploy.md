@@ -62,7 +62,15 @@ near account create-account fund-myself factory.ejecto.testnet '1 NEAR' \
 
 Topping up:
 
-- https://near-faucet.io only accepts accounts that already exist (a fresh implicit account is rejected as "Invalid account") and gives small amounts per request. Use it with `ejecto.testnet`.
+- https://near-faucet.io only accepts accounts that already exist (a fresh implicit account is rejected as "Invalid account") and gives small amounts per request. It also returned errors on 2026-11-09.
+- Fallback that works: create a helper account with the faucet service (about 10 NEAR), then send its NEAR to the master. Done once with `ejecto-topup1.testnet`.
+
+```bash
+near account create-account sponsor-by-faucet-service ejecto-topup2.testnet \
+  autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
+near tokens ejecto-topup2.testnet send-near ejecto.testnet '9.95 NEAR' \
+  network-config testnet sign-with-legacy-keychain send
+```
 - Move NEAR from the master to a sub-account when needed:
 
 ```bash
