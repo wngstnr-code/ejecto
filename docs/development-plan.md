@@ -41,12 +41,13 @@ Done when: `cargo test` passes and buying then selling everything returns the re
 
 Done when: all tests pass, and the claim payouts in the spec example (Ani, Budi, Cici in `research.md`) are reproduced in a test.
 
-### M3: Factory and testnet (2026-11-12)
+### M3: Factory and testnet (2026-11-12, done 2026-11-09)
 
-- [ ] `contracts/factory`: `set_coin_code`, `create_coin` (keyless sub-account), registry views, refunds on failure
-- [ ] `near-workspaces` integration test: launch, keyless check, full lifecycle with a short day length
-- [ ] Deploy the factory to testnet, upload the coin code
-- [ ] Launch one real demo coin on testnet, buy from 3 accounts
+- [x] `contracts/factory`: `set_coin_code`, `create_coin` (keyless sub-account), registry views, refunds on failure, synchronous argument checks (12 unit tests)
+- [x] `near-workspaces` integration test: launch, keyless check, second init rejected, full lifecycle with a short day length, gas measured
+- [x] Parity check against the simulation formulas, wash trading test (moved from M2)
+- [x] Deploy the factory to testnet, upload the coin code (hash matches the local build)
+- [x] Launch one real demo coin on testnet, buy from 3 accounts, sell, EJECT, claim, withdraw protocol fees
 
 Done when: a coin launched on testnet has zero access keys (visible in an explorer) and buy, sell, EJECT and claim work with real transactions.
 
