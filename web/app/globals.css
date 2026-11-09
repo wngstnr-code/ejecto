@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+/* Palette A: Cockpit Night. One source of truth for every color in the app. */
+@theme {
+  --color-ink: #0a0a0b;
+  --color-panel: #131316;
+  --color-panel-2: #1b1b20;
+  --color-line: #2a2a31;
+  --color-bone: #ece8df;
+  --color-muted: #8b8b95;
+  --color-hazard: #ffd400;
+  --color-eject: #ff4d1f;
+  --color-hud: #3ddc84;
+  --color-visor: #d9a521;
+
+  --font-display: var(--font-archivo), "Arial Black", sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
+
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-flicker: flicker 0.12s steps(2) infinite;
+  --animate-blink: blink 1s steps(2) infinite;
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-marquee-slow: marquee 45s linear infinite;
+  --animate-shake: shake 0.35s linear infinite;
+  --animate-radar: radar 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+
+  @keyframes radar {
+    0% { transform: scale(1); opacity: 0.95; }
+    100% { transform: scale(3.4); opacity: 0; }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-14px); }
+  }
+  @keyframes flicker {
+    0% { opacity: 0.85; transform: scaleY(1); }
+    100% { opacity: 1; transform: scaleY(1.12); }
+  }
+  @keyframes blink {
+    0% { opacity: 1; }
+    100% { opacity: 0.15; }
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translate(0, 0) rotate(0); }
+    25% { transform: translate(-1px, 1px) rotate(-1deg); }
+    75% { transform: translate(1px, -1px) rotate(1deg); }
+  }
+}
+
+@layer base {
+  html {
+    background: var(--color-ink);
+    color: var(--color-bone);
+    color-scheme: dark;
+  }
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Tailwind v4 resets buttons to the default cursor. Every clickable control gets a pointer. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  label[for],
+  select {
+    cursor: pointer;
+  }
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+  ::selection {
+    background: var(--color-hazard);
+    color: var(--color-ink);
+  }
+}
+
+@layer components {
+  /* Wide, heavy display type. Archivo is loaded with its width axis. */
+  .display {
+    font-family: var(--font-display);
+    font-weight: 900;
+    font-stretch: 125%;
+    letter-spacing: -0.02em;
+    line-height: 0.88;
+    text-transform: uppercase;
+  }
+  .hazard-stripes {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--color-hazard) 0 14px,
+      var(--color-ink) 14px 28px
+    );
+  }
+  .hazard-stripes-thin {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--color-hazard) 0 5px,
+      var(--color-ink) 5px 10px
+    );
+  }
+  /* Data bars: diagonal stripes that slowly march, turning black on a hovered (yellow) row. */
+  .bar-stripes {
+    background-size: 16px 16px;
+    animation: bar-march 1.2s linear infinite;
+    transition: background-color 0.3s;
+  }
+  .bar-hot {
+    background-color: var(--color-hazard);
+    background-image: linear-gradient(-45deg, rgb(10 10 11 / 0.28) 25%, transparent 25%, transparent 50%, rgb(10 10 11 / 0.28) 50%, rgb(10 10 11 / 0.28) 75%, transparent 75%, transparent);
+  }
+  .bar-muted {
+    background-color: var(--color-muted);
+    background-image: linear-gradient(-45deg, rgb(10 10 11 / 0.35) 25%, transparent 25%, transparent 50%, rgb(10 10 11 / 0.35) 50%, rgb(10 10 11 / 0.35) 75%, transparent 75%, transparent);
+  }
+  .group:hover .bar-hot {
+    background-color: var(--color-ink);
+    background-image: linear-gradient(-45deg, rgb(255 212 0 / 0.35) 25%, transparent 25%, transparent 50%, rgb(255 212 0 / 0.35) 50%, rgb(255 212 0 / 0.35) 75%, transparent 75%, transparent);
+  }
+  .group:hover .bar-muted {
+    background-color: rgb(10 10 11 / 0.45);
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(var(--color-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-line) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+  .label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+}
+
+/* Glitch title: two offset copies, sliced with clip-path. */
+.glitch {
+  position: relative;
+}
+.glitch::before,
+.glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.glitch::before {
+  color: var(--color-hazard);
+  transform: translateX(-0.04em);
+  animation: glitch-a 0.9s steps(1) infinite;
+  mix-blend-mode: screen;
+}
+.glitch::after {
+  color: var(--color-eject);
+  transform: translateX(0.04em);
+  animation: glitch-b 0.7s steps(1) infinite;
+  mix-blend-mode: screen;
+}
+@keyframes bar-march {
+  to {
+    background-position: 16px 0;
+  }
+}
+@keyframes glitch-a {
+  0% { clip-path: inset(10% 0 70% 0); }
+  25% { clip-path: inset(60% 0 15% 0); }
+  50% { clip-path: inset(35% 0 45% 0); }
+  75% { clip-path: inset(80% 0 2% 0); }
+  100% { clip-path: inset(0 0 95% 0); }
+}
+@keyframes glitch-b {
+  0% { clip-path: inset(70% 0 10% 0); }
+  33% { clip-path: inset(20% 0 60% 0); }
+  66% { clip-path: inset(45% 0 30% 0); }
+  100% { clip-path: inset(5% 0 85% 0); }
+}
+
+/* The native scrollbar is hidden: components/site/scroll-bar.tsx draws a free-standing one. */
+html {
+  scrollbar-width: none;
+}
+::-webkit-scrollbar {
+  display: none;
+}
+
+/* Lenis smooth scroll */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
