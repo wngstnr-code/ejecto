@@ -84,8 +84,10 @@ There are no owner-only methods. There is no upgrade method.
 ### Math implementation
 
 - Amounts are `u128` yoctoNEAR. Token amounts are `u128` raw units (10^18 per token).
-- Intermediate products (for example `supply^2`) use a 256-bit integer (`uint` crate, `construct_uint!`) to avoid overflow.
-- Buy solves a quadratic with an integer square root on 256-bit values, then recomputes `cost = R(s+d) - R(s)` exactly.
+- Intermediate products (for example `supply^2`) use a 512-bit integer (`uint` crate, `construct_uint!`) so no allowed input can overflow.
+- Buy solves the quadratic with an integer square root (Newton, starting from `2^ceil(bits/2)`), then binary searches a window of 256 raw units around the root for the largest `d` whose exact cost fits. Gas stays small and constant.
+- Pure curve math lives in `contracts/coin/src/curve.rs`. The contract lives in `lib.rs`, events in `events.rs`, unit tests in `tests.rs`.
+- NEP-141 and NEP-145 come from `near-contract-standards` (`FungibleToken`), wrapped so Ejecto can add hooks (M2) and block forced unregister.
 - Rounding rules from the spec: tokens out and proceeds round down, fees round up, rounding dust goes to the fund.
 - Time: `env::block_timestamp()` is nanoseconds. Convert to seconds. `day = (now - launch_ts) / day_length_sec`.
 
