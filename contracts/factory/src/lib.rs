@@ -16,6 +16,12 @@ use near_sdk::{
 /// Extra deposit on top of the code storage, for the coin state and the first registrations.
 pub const LAUNCH_MARGIN: u128 = 300_000_000_000_000_000_000_000; // 0.3 NEAR
 const GAS_FOR_INIT: Gas = Gas::from_tgas(30);
+/// Launch argument limits. They MUST match the coin's `new` (contracts/coin/src/lib.rs), so
+/// that bad input is rejected here, synchronously, before the async launch batch.
+pub const MIN_DAY_LENGTH: u64 = 10;
+pub const MAX_DAY_LENGTH: u64 = 86_400;
+pub const MAX_NAME_CHARS: usize = 32;
+pub const MAX_ICON_BYTES: usize = 2048;
 const GAS_FOR_CALLBACK: Gas = Gas::from_tgas(15);
 
 #[derive(BorshStorageKey)]
@@ -24,6 +30,7 @@ enum StorageKey {
     CoinCode,
     Coins,
     BySymbol,
+    PendingRefunds,
 }
 
 /// Registry entry for a launched coin.
@@ -61,6 +68,20 @@ pub struct Factory {
     coin_code_hash: Option<String>,
     coins: Vector<CoinInfo>,
     by_symbol: LookupMap<String, u32>,
+    /// Deposits of failed launches, withdrawn by the creator with `withdraw_refund`.
+    pending_refunds: LookupMap<AccountId, u128>,
+}
+
+/// State layout before `pending_refunds` existed (deployed on testnet 2026-11-09).
+#[near(serializers = [borsh])]
+struct FactoryV1 {
+    owner: AccountId,
+    protocol_account: AccountId,
+    coin_code: LazyOption<Vec<u8>>,
+    coin_code_len: u64,
+    coin_code_hash: Option<String>,
+    coins: Vector<CoinInfo>,
+    by_symbol: LookupMap<String, u32>,
 }
 
 fn valid_symbol(symbol: &str) -> bool {
@@ -86,6 +107,24 @@ impl Factory {
             coin_code_hash: None,
             coins: Vector::new(StorageKey::Coins),
             by_symbol: LookupMap::new(StorageKey::BySymbol),
+            pending_refunds: LookupMap::new(StorageKey::PendingRefunds),
+        }
+    }
+
+    /// One-time state migration from `FactoryV1`. Only the factory account itself can call it.
+    #[private]
+    #[init(ignore_state)]
+    pub fn migrate() -> Self {
+        let old: FactoryV1 = env::state_read().unwrap_or_else(|| env::panic_str("No v1 state"));
+        Self {
+            owner: old.owner,
+            protocol_account: old.protocol_account,
+            coin_code: old.coin_code,
+            coin_code_len: old.coin_code_len,
+            coin_code_hash: old.coin_code_hash,
+            coins: old.coins,
+            by_symbol: old.by_symbol,
+            pending_refunds: LookupMap::new(StorageKey::PendingRefunds),
         }
     }
 
@@ -104,8 +143,9 @@ impl Factory {
     }
 
     /// Launches a coin at `<symbol>.<this factory>`. The new account gets no access keys.
-    /// Attach at least `launch_deposit()`. The deposit pays for the coin's storage.
-    /// On failure the deposit is refunded to the caller.
+    /// Attach at least `launch_deposit()`. Exactly `launch_deposit()` goes to the coin for its
+    /// storage, anything above it is refunded at once. If the launch fails, the deposit is
+    /// booked as a pending refund that the creator withdraws with `withdraw_refund`.
     #[payable]
     pub fn create_coin(
         &mut self,
@@ -130,14 +170,14 @@ impl Factory {
         // Same rules as the coin's `new`. Checking here makes bad input fail synchronously,
         // so the deposit is refunded by the runtime instead of by the async callback.
         require!(
-            !name.is_empty() && name.chars().count() <= 32,
+            !name.is_empty() && name.chars().count() <= MAX_NAME_CHARS,
             "name must be 1 to 32 characters"
         );
         if let Some(i) = &icon {
-            require!(i.len() <= 2048, "icon must be at most 2 KB");
+            require!(i.len() <= MAX_ICON_BYTES, "icon must be at most 2 KB");
         }
         require!(
-            (10..=86_400).contains(&day_length_sec),
+            (MIN_DAY_LENGTH..=MAX_DAY_LENGTH).contains(&day_length_sec),
             "day_length_sec must be between 10 and 86400"
         );
         let code = self
@@ -156,6 +196,12 @@ impl Factory {
             .parse()
             .unwrap_or_else(|_| env::panic_str("Invalid coin account id"));
         let creator = env::predecessor_account_id();
+        // A keyless coin could never give back extra NEAR, so send exactly `min` and refund the rest.
+        if deposit > min {
+            Promise::new(creator.clone())
+                .transfer(NearToken::from_yoctonear(deposit - min))
+                .detach();
+        }
         let init_args = json!({
             "name": name,
             "symbol": symbol,
@@ -176,12 +222,12 @@ impl Factory {
             created_at: env::block_timestamp() / 1_000_000_000,
         };
 
-        // One atomic batch: if any action fails, all of them are reverted and the
-        // deposit comes back to the factory, which refunds the creator in the callback.
+        // One atomic batch: if any action fails, all of them are reverted and the deposit
+        // comes back to the factory. The callback books it as a pending refund.
         // No `add_full_access_key` / `add_access_key`: the coin account is keyless.
         Promise::new(coin_id)
             .create_account()
-            .transfer(NearToken::from_yoctonear(deposit))
+            .transfer(NearToken::from_yoctonear(min))
             .deploy_contract(code)
             .function_call(
                 "new".to_string(),
@@ -192,11 +238,13 @@ impl Factory {
             .then(
                 Self::ext(env::current_account_id())
                     .with_static_gas(GAS_FOR_CALLBACK)
-                    .on_coin_created(info, creator, U128(deposit)),
+                    .on_coin_created(info, creator, U128(min)),
             )
     }
 
-    /// Registers the coin after a successful launch, or refunds the creator.
+    /// Registers the coin after a successful launch. After a failed launch the deposit is
+    /// booked as a pending refund. It is not sent right away, because the system refund of
+    /// the failed batch may reach the factory only after this callback runs.
     #[private]
     pub fn on_coin_created(
         &mut self,
@@ -205,7 +253,23 @@ impl Factory {
         deposit: U128,
         #[callback_result] result: Result<(), PromiseError>,
     ) -> bool {
-        if result.is_ok() && !self.by_symbol.contains_key(&info.symbol) {
+        if result.is_err() {
+            let pending = self.pending_refunds.get(&creator).copied().unwrap_or(0);
+            self.pending_refunds
+                .insert(creator.clone(), pending + deposit.0);
+            env::log_str(&format!(
+                "EVENT_JSON:{}",
+                json!({
+                    "standard": "ejecto",
+                    "version": "1.0.0",
+                    "event": "ejecto_launch_failed",
+                    "data": [{ "creator": creator, "symbol": info.symbol, "refund": deposit }],
+                })
+            ));
+            return false;
+        }
+        // On success the deposit was spent on the coin account. Never refund it here.
+        if !self.by_symbol.contains_key(&info.symbol) {
             self.by_symbol.insert(info.symbol.clone(), self.coins.len());
             env::log_str(&format!(
                 "EVENT_JSON:{}",
@@ -217,13 +281,23 @@ impl Factory {
                 })
             ));
             self.coins.push(info);
-            true
-        } else {
-            Promise::new(creator)
-                .transfer(NearToken::from_yoctonear(deposit.0))
-                .detach();
-            false
         }
+        true
+    }
+
+    /// Sends the caller's pending refunds from failed launches.
+    pub fn withdraw_refund(&mut self) -> U128 {
+        let account = env::predecessor_account_id();
+        let amount = self.pending_refunds.remove(&account).unwrap_or(0);
+        require!(amount > 0, "No pending refund");
+        Promise::new(account)
+            .transfer(NearToken::from_yoctonear(amount))
+            .detach();
+        U128(amount)
+    }
+
+    pub fn pending_refund(&self, account_id: AccountId) -> U128 {
+        U128(self.pending_refunds.get(&account_id).copied().unwrap_or(0))
     }
 
     // ---------- views ----------
@@ -415,14 +489,83 @@ mod tests {
         assert!(f.on_coin_created(info.clone(), info.creator.clone(), U128(NEAR), Ok(())));
         assert_eq!(f.get_coin("seato".into()), Some(info.clone()));
         assert_eq!(f.get_coins(None, None).len(), 1);
-        // a second success for the same symbol must not register twice
-        assert!(!f.on_coin_created(info.clone(), info.creator.clone(), U128(NEAR), Ok(())));
+        // a second success for the same symbol must not register twice and never refunds
+        assert!(f.on_coin_created(info.clone(), info.creator.clone(), U128(NEAR), Ok(())));
         assert_eq!(f.get_config().coins, 1);
-        // a failed launch refunds and registers nothing
+        assert_eq!(f.pending_refund(info.creator.clone()).0, 0);
+        // a failed launch registers nothing and books a pending refund
         let mut other = info.clone();
         other.symbol = "moon".into();
-        assert!(!f.on_coin_created(other, info.creator, U128(NEAR), Err(PromiseError::Failed)));
+        assert!(!f.on_coin_created(
+            other.clone(),
+            info.creator.clone(),
+            U128(NEAR),
+            Err(PromiseError::Failed)
+        ));
+        assert!(!f.on_coin_created(
+            other,
+            info.creator.clone(),
+            U128(NEAR),
+            Err(PromiseError::Failed)
+        ));
         assert_eq!(f.get_coin("moon".into()), None);
+        assert_eq!(f.pending_refund(info.creator.clone()).0, 2 * NEAR);
+        // the creator withdraws it once
+        ctx("ani.ejecto.testnet", 0, vec![]);
+        assert_eq!(f.withdraw_refund().0, 2 * NEAR);
+        assert_eq!(f.pending_refund(info.creator).0, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "No pending refund")]
+    fn withdraw_without_refund_panics() {
+        let mut f = setup();
+        ctx("ani.ejecto.testnet", 0, vec![]);
+        f.withdraw_refund();
+    }
+
+    #[test]
+    fn day_length_boundaries_match_the_coin() {
+        for (day, ok) in [(9u64, false), (10, true), (86_400, true), (86_401, false)] {
+            let result = std::thread::spawn(move || {
+                let mut f = setup();
+                ctx("ejecto.testnet", 0, fake_wasm());
+                f.set_coin_code();
+                ctx("ani.ejecto.testnet", 3 * NEAR, vec![]);
+                f.create_coin("Seato".into(), "seato".into(), None, "standard".into(), day)
+                    .detach();
+            })
+            .join();
+            assert_eq!(result.is_ok(), ok, "day_length_sec {day}");
+        }
+    }
+
+    #[test]
+    fn excess_deposit_is_refunded_at_once() {
+        let mut f = setup();
+        ctx("ejecto.testnet", 0, fake_wasm());
+        f.set_coin_code();
+        let min = f.launch_deposit().0;
+        ctx("ani.ejecto.testnet", min + 5 * NEAR, vec![]);
+        f.create_coin("Seato".into(), "seato".into(), None, "standard".into(), 10)
+            .detach();
+        let receipts = near_sdk::test_utils::get_created_receipts();
+        let refund_to_creator = receipts.iter().any(|r| {
+            r.receiver_id.as_str() == "ani.ejecto.testnet"
+                && r.actions.iter().any(|a| matches!(a, near_sdk::mock::MockAction::Transfer { deposit, .. } if deposit.as_yoctonear() == 5 * NEAR))
+        });
+        assert!(
+            refund_to_creator,
+            "the 5 NEAR above the minimum must go back to the creator"
+        );
+        let coin_gets_min = receipts.iter().any(|r| {
+            r.receiver_id.as_str() == "seato.factory.ejecto.testnet"
+                && r.actions.iter().any(|a| matches!(a, near_sdk::mock::MockAction::Transfer { deposit, .. } if deposit.as_yoctonear() == min))
+        });
+        assert!(
+            coin_gets_min,
+            "the coin account must receive exactly the minimum"
+        );
     }
 
     #[test]
