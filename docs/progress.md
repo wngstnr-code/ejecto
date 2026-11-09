@@ -15,14 +15,13 @@ Update this file at the end of every session and after every milestone. Newest e
 
 1. Start M3: `contracts/factory` (keyless `create_coin`, registry views, refunds), then a `near-workspaces` integration test (launch, keyless check, init twice rejected, full lifecycle with a short day length, gas measurement).
 2. M3 also: parity check sim vs contract on one fixed scenario, and a contract-level wash trading test.
-3. Ask the user to top up `ejecto.testnet` at near-faucet.io before M3 (deployments need more NEAR).
 4. Before the deadline, ask the user to make the repo public (it is private now).
 
 ## Blockers and open questions
 
 | Question | Owner | Status |
 |---|---|---|
-| Top up `ejecto.testnet` to 20 to 30 NEAR before M3 | user | open |
+| More NEAR if M3 or M4 needs it (near-faucet.io still errors, use another faucet-service helper account with the user's OK) | user | open |
 | When to make the GitHub repo public (must be public before the deadline) | user | open |
 | Wallet package for the web app (Wallet Selector or near-connect) | dev, check docs before M4 | open |
 
@@ -70,7 +69,8 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | What | Account | Notes |
 |---|---|---|
-| Master, funder, factory owner | `ejecto.testnet` | Created by the faucet service, 10 NEAR, now about 6.86 NEAR |
+| Master, funder, factory owner | `ejecto.testnet` | Created by the faucet service. About 16.8 NEAR after a top-up on 2026-11-09 |
+| Top-up helper | `ejecto-topup1.testnet` | Created by the faucet service, sent 9.95 NEAR to the master, about 0.05 NEAR left |
 | Factory (no code yet) | `factory.ejecto.testnet` | 1 NEAR |
 | Protocol fees | `fees.ejecto.testnet` | 0.1 NEAR |
 | Demo holders | `ani`, `budi`, `cici`, `whale` `.ejecto.testnet` | 0.5 NEAR each |
