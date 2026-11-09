@@ -353,8 +353,9 @@ impl Coin {
         }
         .emit();
         events::sell(&seller, d, &q);
-        // Dropping a Promise schedules it, the binding only silences the must_use lint.
-        let _ = Promise::new(seller).transfer(NearToken::from_yoctonear(q.near_out.0));
+        Promise::new(seller)
+            .transfer(NearToken::from_yoctonear(q.near_out.0))
+            .detach();
         q.near_out
     }
 
@@ -364,8 +365,9 @@ impl Coin {
         require!(amount > 0, "No protocol fees to withdraw");
         self.protocol_fees = 0;
         events::protocol_withdraw(&self.protocol_account, amount);
-        let _ =
-            Promise::new(self.protocol_account.clone()).transfer(NearToken::from_yoctonear(amount));
+        Promise::new(self.protocol_account.clone())
+            .transfer(NearToken::from_yoctonear(amount))
+            .detach();
         U128(amount)
     }
 
@@ -446,7 +448,9 @@ impl Coin {
         .emit();
         events::claim(&account, balance, reserve_part, fund_part);
         if payout > 0 {
-            let _ = Promise::new(account).transfer(NearToken::from_yoctonear(payout));
+            Promise::new(account)
+                .transfer(NearToken::from_yoctonear(payout))
+                .detach();
         }
         U128(payout)
     }
