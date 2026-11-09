@@ -45,7 +45,7 @@ Users:
 
 ## 4. Launch
 
-`create_coin` on the factory creates `<symbol>.<factory-account>` and deploys the coin contract. The new account has no access keys.
+`create_coin` on the factory creates `<symbol>.<factory-account>` and deploys the coin contract. The new account has no access keys. The factory checks every launch argument before it starts the launch, so bad input fails at once and the deposit is refunded by the runtime.
 
 Launch arguments (all immutable afterwards):
 
