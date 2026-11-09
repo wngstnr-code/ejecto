@@ -440,7 +440,7 @@ fn status_age_counts_days() {
         0,
         START_NS + 3 * REAL_DAY * 1_000_000_000 + 5,
     );
-    assert_eq!(c.status().age_days, 3);
+    assert_eq!(c.status().day, 3);
 }
 
 // =====================================================================================
@@ -711,11 +711,20 @@ fn transfer_moves_basis_but_not_weight() {
     register(&mut c, &a);
     register(&mut c, &b);
     let d = buy_at(&mut c, &a, 10 * NEAR, 0);
-    // half on day 5: Ani keeps her weight, half her basis moves to Budi
+    let w_before = Ledger::live_weight(&h(&c, &a), at_day(5) / SEC);
+    // half on day 5: half of Ani's basis moves to Budi, Ani sheds half of her weight
     transfer_at(&mut c, &a, &b, d / 2, 5);
     let (ha, hb) = (h(&c, &a), h(&c, &b));
-    assert_eq!(hb.weight, 0, "receiver starts from zero weight");
-    assert!(ha.weight > 0);
+    assert_eq!(
+        hb.weight, 0,
+        "receiver starts from zero weight, weight never moves"
+    );
+    assert!(
+        ha.weight.abs_diff(w_before / 2) <= 1,
+        "sender keeps only half: {} vs {}",
+        ha.weight,
+        w_before / 2
+    );
     assert_eq!(ha.basis + hb.basis, 10 * NEAR as i128);
     assert!((hb.basis - 5 * NEAR as i128).abs() <= 1);
     // the rest on day 6: Ani leaves the ship
@@ -1029,5 +1038,216 @@ fn wash_trading_mostly_feeds_the_fund() {
         h(&c, &washer).weight,
         0,
         "the washer never stays, so never earns weight"
+    );
+}
+
+// =====================================================================================
+// ft_transfer_call refunds (ft_resolve_transfer) with a mocked promise result
+// =====================================================================================
+
+/// Calls `ft_resolve_transfer` as the contract itself, with the receiver reporting
+/// `unused` tokens (the part that must be refunded to the sender).
+fn resolve_with_unused(
+    c: &mut Coin,
+    sender: &AccountId,
+    receiver: &AccountId,
+    amount: u128,
+    unused: u128,
+    day: u64,
+) -> u128 {
+    let mut b = VMContextBuilder::new();
+    b.current_account_id(coin_id())
+        .predecessor_account_id(coin_id())
+        .block_timestamp(at_day(day));
+    testing_env!(
+        b.build(),
+        near_sdk::test_vm_config(),
+        near_sdk::RuntimeFeesConfig::test(),
+        Default::default(),
+        vec![near_sdk::PromiseResult::Successful(
+            format!("\"{unused}\"").into_bytes()
+        )],
+    );
+    c.ft_resolve_transfer(sender.clone(), receiver.clone(), U128(amount))
+        .0
+}
+
+fn transfer_call_at(c: &mut Coin, from: &AccountId, to: &AccountId, d: u128, day: u64) {
+    ctx(from, 1, at_day(day));
+    let _ = c.ft_transfer_call(to.clone(), U128(d), None, String::new());
+}
+
+#[test]
+fn transfer_call_refund_moves_basis_back() {
+    let mut c = setup_demo(FeePreset::Standard);
+    let (a, b) = (user("ani"), user("budi"));
+    register(&mut c, &a);
+    register(&mut c, &b);
+    let d = buy_at(&mut c, &a, 10 * NEAR, 0);
+    let half = d / 2;
+    transfer_call_at(&mut c, &a, &b, half, 1);
+    assert_eq!(
+        h(&c, &b).basis,
+        0,
+        "no accounting while the tokens are in flight"
+    );
+    // the receiver uses only half of what it got, the other half comes back
+    let unused = half / 2;
+    let used = resolve_with_unused(&mut c, &a, &b, half, unused, 2);
+    assert_eq!(used, half - unused);
+    assert_eq!(balance(&c, &b), half - unused);
+    assert_eq!(balance(&c, &a), d - half + unused);
+    // only the used quarter is booked: about 2.5 NEAR of Ani's basis moves to Budi
+    let (ha, hb) = (h(&c, &a), h(&c, &b));
+    assert!(
+        (hb.basis - 25 * NEAR as i128 / 10).abs() <= 2,
+        "budi basis {}",
+        hb.basis
+    );
+    assert_eq!(ha.basis + hb.basis, 10 * NEAR as i128);
+    let users = [a, b];
+    assert_s_pos(&c, &users);
+    assert_weights(&c, &users, at_day(2) / SEC);
+}
+
+#[test]
+fn transfer_call_full_refund_after_eject_moves_tokens_only() {
+    let mut c = setup_demo(FeePreset::Standard);
+    let (a, b) = (user("ani"), user("budi"));
+    register(&mut c, &a);
+    register(&mut c, &b);
+    let d = buy_at(&mut c, &a, 10 * NEAR, 0);
+    transfer_call_at(&mut c, &a, &b, d / 2, 1);
+    let snap = eject_at(&mut c, 15);
+    let (ha0, hb0) = (h(&c, &a), h(&c, &b));
+    let receiver_weight = hb0.weight;
+    // the callback lands after EJECT and refunds everything
+    let used = resolve_with_unused(&mut c, &a, &b, d / 2, d / 2, 16);
+    assert_eq!(used, 0);
+    assert_eq!(balance(&c, &a), d);
+    assert_eq!(balance(&c, &b), 0);
+    assert_eq!(
+        (h(&c, &a), h(&c, &b)),
+        (ha0, hb0),
+        "accounting is frozen after EJECT"
+    );
+    assert_eq!(
+        receiver_weight, 0,
+        "the receiver never got basis for in-flight tokens, so no stranded weight"
+    );
+    // weights at t_e still sum to w_e, so claims stay within the snapshot
+    let users = [a.clone(), b.clone()];
+    let wsum: u128 = users
+        .iter()
+        .map(|u| Ledger::live_weight(&h(&c, u), snap.t_e))
+        .sum();
+    assert_eq!(wsum, snap.w_e.0);
+    let got = claim_at(&mut c, &a, 17);
+    assert!(got <= snap.reserve_e.0 + snap.fund_e.0);
+}
+
+// =====================================================================================
+// Regression tests for the M1 to M3 review findings
+// =====================================================================================
+
+/// Finding: a refunded ft_transfer_call pulled basis out of the receiver.
+#[test]
+fn refund_cannot_drain_a_victims_basis() {
+    let mut c = setup_demo(FeePreset::Standard);
+    let (attacker, victim) = (user("whale"), user("ani"));
+    register(&mut c, &attacker);
+    register(&mut c, &victim);
+    buy_at(&mut c, &victim, 20 * NEAR, 0);
+    let x = buy_at(&mut c, &attacker, NEAR, 0);
+    let victim_basis = h(&c, &victim).basis;
+    let attacker_basis = h(&c, &attacker).basis;
+    for day in 1..5 {
+        // the victim has no contract, so ft_on_transfer fails and everything is refunded
+        transfer_call_at(&mut c, &attacker, &victim, x, day);
+        let used = resolve_with_unused(&mut c, &attacker, &victim, x, x, day);
+        assert_eq!(used, 0);
+    }
+    assert_eq!(
+        h(&c, &victim).basis,
+        victim_basis,
+        "victim basis must not move"
+    );
+    assert_eq!(
+        h(&c, &attacker).basis,
+        attacker_basis,
+        "attacker gains nothing"
+    );
+    assert_eq!(balance(&c, &attacker), x);
+}
+
+/// Finding: keeping 1 raw token kept all accrued weight.
+#[test]
+fn keeping_dust_does_not_keep_the_weight() {
+    let mut c = setup_demo(FeePreset::Standard);
+    let a = user("ani");
+    register(&mut c, &a);
+    let d = buy_at(&mut c, &a, 10 * NEAR, 0);
+    let w = Ledger::live_weight(&h(&c, &a), at_day(10) / SEC);
+    sell_at(&mut c, &a, d - 1, 10);
+    let kept = h(&c, &a).weight;
+    assert!(kept <= w / d + 1, "dust kept {kept} of {w}");
+}
+
+/// Finding: moving tokens to a sybil and selling there kept the old weight at home.
+#[test]
+fn sending_tokens_away_sheds_weight() {
+    let mut c = setup_demo(FeePreset::Standard);
+    let (a, sybil) = (user("ani"), user("budi"));
+    register(&mut c, &a);
+    register(&mut c, &sybil);
+    let d = buy_at(&mut c, &a, 10 * NEAR, 0);
+    let w = Ledger::live_weight(&h(&c, &a), at_day(10) / SEC);
+    let keep = d / 100;
+    transfer_at(&mut c, &a, &sybil, d - keep, 10);
+    let left = h(&c, &a).weight;
+    assert!(
+        left.abs_diff(w / 100) <= 2,
+        "ani should keep about 1% of her weight, kept {left} of {w}"
+    );
+    sell_at(&mut c, &sybil, d - keep, 11);
+    assert_eq!(h(&c, &sybil).weight, 0);
+}
+
+/// Finding: tokens refunded after a claim could not be claimed.
+#[test]
+fn claim_again_after_a_late_refund() {
+    let mut c = setup_demo(FeePreset::Standard);
+    let (a, b) = (user("ani"), user("budi"));
+    register(&mut c, &a);
+    register(&mut c, &b);
+    let d = buy_at(&mut c, &a, 10 * NEAR, 0);
+    buy_at(&mut c, &b, 5 * NEAR, 0);
+    transfer_call_at(&mut c, &a, &b, d / 2, 1);
+    let snap = eject_at(&mut c, 15);
+    let first = claim_at(&mut c, &a, 16);
+    // the callback lands after Ani's claim and refunds all in-flight tokens
+    resolve_with_unused(&mut c, &a, &b, d / 2, d / 2, 17);
+    assert_eq!(balance(&c, &a), d / 2);
+    let view = c.holder(a.clone());
+    assert_eq!(view.fund_part.0, 0, "the fund part is paid only once");
+    let second = claim_at(&mut c, &a, 18);
+    assert!(second > 0 && second == view.reserve_part.0);
+    let third = claim_at(&mut c, &b, 18);
+    assert!(first + second + third <= snap.reserve_e.0 + snap.fund_e.0);
+    assert!(c.reserve + c.fund < 1_000_000);
+}
+
+/// Finding: any ancestor account could initialize the coin.
+#[test]
+#[should_panic(expected = "Only the factory")]
+fn init_by_grandparent_panics() {
+    ctx(&acc("ejecto.testnet"), 0, START_NS);
+    Coin::new(
+        "Seato".into(),
+        "seato".into(),
+        None,
+        FeePreset::Standard,
+        REAL_DAY,
+        protocol(),
     );
 }
