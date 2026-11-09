@@ -108,7 +108,7 @@ function run(seed, mode, opts = {}) {
     }
     m.updPeak(day);
     if (m.canEject(day)) { snapBeforeEject = m.clone(); m.eject(day, opts.weighting || 'time'); }
-    series.push({ day, price: price(m.s), reserve: m.reserve, fund: m.fund, holders: [...m.h.values()].filter(h => h.bal > 0).length });
+    series.push({ day, price: price(m.s), reserve: m.reserve, fund: m.fund, holders: [...m.h.values()].filter(h => h.bal > 0).length, windowBuys: m.windowBuys(day), threshold: Math.max(ALIVE_MIN, ALIVE_FRAC * m.peakWin) });
   }
   if (mode === 'baseline') m.raceExit(agents, DAYS + 1);
   if (mode === 'ejecto' && !m.ejected) { m.eject(DAYS, opts.weighting || 'time'); } // end of sim: settle remaining
@@ -210,5 +210,14 @@ function attackChart() {
   s += `<text x="${w - R - 4}" y="${Y(yMax * 0.85)}" text-anchor="end" fill="${C.muted}">profit ↑</text><text x="${w - R - 4}" y="${Y(-yMax * 0.85)}" text-anchor="end" fill="${C.muted}">loss ↓</text>`;
   return s + '</svg>';
 }
+// Compact series of the example coin for the web app landing chart (model data, labeled as such in the UI).
+const r2 = x => Math.round(x * 100) / 100;
+fs.writeFileSync(`${OUT}/example-series.json`, JSON.stringify({
+  model: true, seed: example.seed, ejectDay: example.ejectDay, windowDays: WINDOW, minAgeDays: MIN_AGE,
+  holdersAtEject: example.holdersAtEject, fundAtEject: r2(example.fundAtEject), reserveAtEject: r2(example.reserveAtEject),
+  holdersLossBase: r2(example.holdersLossBase), holdersLossEj: r2(example.holdersLossEj),
+  summary: { runs: summary.runs, traders: summary.traders, investedPerCoin: r2(summary.baseline.invested), lossBasePerCoin: r2(summary.baseline.lossSum), lossEjectoPerCoin: r2(summary.ejecto.lossSum), lossReductionPct: r2(summary.lossReductionPct), wipedBasePct: r2(summary.baseline.wipedPct), wipedEjectoPct: r2(summary.ejecto.wipedPct), ejectDayMedian: summary.ejectDayMedian, ejectedWithin60Pct: r2(summary.ejectedWithin60Pct) },
+  days: example.series.map(p => ({ day: p.day, windowBuys: r2(p.windowBuys), threshold: r2(p.threshold), reserve: r2(p.reserve), fund: r2(p.fund), holders: p.holders })),
+}, null, 1));
 fs.writeFileSync(`${OUT}/chart-example.svg`, chart1); fs.writeFileSync(`${OUT}/chart-attack.svg`, attackChart());
 console.log(JSON.stringify({ sens, summary, example: { ...example, series: undefined }, attacks, wash: washRes }, null, 2));
