@@ -28,15 +28,16 @@ Done when: `cargo near --version` and `near --version` work, and the accounts ex
 
 Done when: `cargo test` passes and buying then selling everything returns the reserve to 0 with no loss to the contract.
 
-### M2: Accounting, detector, EJECT, claim (2026-11-11)
+### M2: Accounting, detector, EJECT, claim (2026-11-11, done 2026-11-09 except parity)
 
-- [ ] Holder accounting: basis, weight, `S_pos`, `W`, `touch`, full exit forfeits weight
-- [ ] Transfer rule (basis moves, weight stays)
-- [ ] 14-bucket alive detector, peak window, threshold
-- [ ] `eject`, `claim`, `withdraw_protocol_fees`, `holder` view
-- [ ] Events (NEP-297)
-- [ ] Unit tests: invariants 3 to 6, attack scenarios (late whale, wash, sybil, transfer), claim sums
-- [ ] Parity check against the sim on one fixed scenario
+- [x] Holder accounting: basis, weight, `S_pos`, `W`, `touch`, full exit forfeits weight
+- [x] Transfer rule (basis moves, weight stays), also for `ft_transfer_call` refunds
+- [x] 14-bucket alive detector, peak window, threshold
+- [x] `eject`, `claim`, `withdraw_protocol_fees`, `holder` view
+- [x] Events (NEP-297)
+- [x] Unit tests: invariants 3 to 6, attack scenarios (late whale, sybil, transfer), claim sums (60 tests in total)
+- [ ] Wash trading test at contract level (covered by the simulation only so far)
+- [ ] Parity check against the sim on one fixed scenario (moved to M3)
 
 Done when: all tests pass, and the claim payouts in the spec example (Ani, Budi, Cici in `research.md`) are reproduced in a test.
 
