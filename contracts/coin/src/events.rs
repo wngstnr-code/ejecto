@@ -1,7 +1,7 @@
 //! Ejecto NEP-297 events. Standard "ejecto", version "1.0.0".
 //! Token mint and burn also emit the standard NEP-141 events (FtMint, FtBurn).
 
-use crate::{BuyQuote, SellQuote};
+use crate::{BuyQuote, EjectSnapshot, SellQuote};
 use near_sdk::serde_json::json;
 use near_sdk::{env, AccountId};
 
@@ -47,5 +47,21 @@ pub fn protocol_withdraw(to: &AccountId, amount: u128) {
     emit(
         "ejecto_protocol_withdraw",
         json!({ "account_id": to, "amount": amount.to_string() }),
+    );
+}
+
+pub fn eject(snap: &EjectSnapshot) {
+    emit("ejecto_eject", json!(snap));
+}
+
+pub fn claim(account: &AccountId, tokens_burned: u128, reserve_part: u128, fund_part: u128) {
+    emit(
+        "ejecto_claim",
+        json!({
+            "account_id": account,
+            "tokens_burned": tokens_burned.to_string(),
+            "reserve_part": reserve_part.to_string(),
+            "fund_part": fund_part.to_string(),
+        }),
     );
 }
