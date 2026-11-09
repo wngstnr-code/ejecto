@@ -1,0 +1,16 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="ejecto-shell">
+      <circle cx="256" cy="262" r="190"/>
+    </clipPath>
+  </defs>
+  <g id="icon">
+    <rect x="34" y="224" width="44" height="88" rx="20" fill="#2A2A31" stroke="#0A0A0B" stroke-width="10"/>
+    <rect x="434" y="224" width="44" height="88" rx="20" fill="#2A2A31" stroke="#0A0A0B" stroke-width="10"/>
+    <circle cx="256" cy="262" r="196" fill="#0A0A0B"/>
+    <circle cx="256" cy="262" r="184" fill="#ECE8DF"/>
+    <rect x="222" y="40" width="68" height="150" fill="#FF4D1F" clip-path="url(#ejecto-shell)"/>
+    <path d="M100 286 C100 214 170 190 256 190 C342 190 412 214 412 286 C412 364 342 394 256 394 C170 394 100 364 100 286 Z" fill="#D9A521" stroke="#0A0A0B" stroke-width="14"/>
+    <path d="M146 262 C158 230 196 218 236 218" fill="none" stroke="#FFF1A8" stroke-width="20" stroke-linecap="round"/>
+  </g>
+</svg>
