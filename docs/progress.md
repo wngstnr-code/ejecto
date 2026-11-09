@@ -13,7 +13,7 @@ Update this file at the end of every session and after every milestone. Newest e
 
 ## Next step (exact)
 
-1. Start M4: `web/` with Vite + React + TypeScript (contracts are reviewed and redeployed). First check docs.near.org for the currently recommended wallet package (Wallet Selector or near-connect).
+1. Start M4: `web/` with Next.js + Tailwind + TypeScript, static export (D-022) (contracts are reviewed and redeployed). First check docs.near.org for the currently recommended wallet package (Wallet Selector or near-connect).
 2. Pages: Home (coin list from `factory.ejecto.testnet`), Launch, Coin (engine meter, your seat, buy, sell, EJECT, claim, DEMO TIME banner), Simulation.
 3. For the demo video, launch a fresh demo coin (about 2.68 NEAR). `ejecto.testnet` has about 5.6 NEAR, so a top-up helper may be needed (see `build-and-deploy.md`).
 4. Before the deadline, ask the user to make the repo public (it is private now).

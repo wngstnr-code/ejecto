@@ -16,7 +16,7 @@ Installed on the dev machine (checked 2026-11-09):
 | cargo-near | 0.23.0 | installed |
 | near-cli-rs | 0.31.1 | installed |
 
-Latest library versions seen on 2026-11-09: `near-sdk` 5.30.1, `near-workspaces` 0.24.0, `near-api-js` 7.4.0, `@near-wallet-selector/core` 10.1.4, `vite` 8.3.7.
+Latest library versions seen on 2026-11-09: `near-sdk` 5.30.1, `near-workspaces` 0.24.0, `near-api-js` 7.4.0, `@near-wallet-selector/core` 10.1.4, `next` 16.4.5, `tailwindcss` 4.3.5, `@hot-labs/near-connect` 0.12.0.
 
 Install the missing tools:
 
@@ -180,12 +180,12 @@ cp .env.example .env        # once, at the repo root (the only env file)
 cd web
 pnpm install
 pnpm dev                    # local dev server
-pnpm build                  # static build in web/dist
+pnpm build                  # static export in web/out
 ```
 
-Hosting: GitHub Pages from `web/dist` (GitHub Actions workflow or the `gh-pages` branch). Set the Vite `base` option to the repo name.
+Hosting: GitHub Pages from `web/out` (GitHub Actions workflow or the `gh-pages` branch). `web/next.config.ts` sets `output: 'export'`, `basePath` to the repo name, `trailingSlash: true` and `images.unoptimized: true`. Add an empty `.nojekyll` file to the output so GitHub Pages serves the `_next/` folder.
 
-`web/vite.config.ts` must set `envDir: '..'` so Vite reads the root `.env`. Only variables that start with `VITE_` reach the browser. Never put anything secret in a `VITE_` variable.
+`web/next.config.ts` must call `loadEnvConfig` (from `@next/env`) on the repo root so Next.js reads the root `.env`. Only variables that start with `NEXT_PUBLIC_` reach the browser. Never put anything secret in a `NEXT_PUBLIC_` variable.
 
 ## 5. Simulation
 

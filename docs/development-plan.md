@@ -53,7 +53,7 @@ Done when: a coin launched on testnet has zero access keys (visible in an explor
 
 ### M4: Web app (2026-11-13)
 
-- [ ] Vite + React + TS scaffold, wallet connection, RPC views
+- [ ] Next.js + Tailwind + TS scaffold (static export), wallet connection, RPC views
 - [ ] Home, Launch, Coin pages (engine meter, your seat, EJECT, claim, DEMO TIME banner)
 - [ ] Simulation page (static JSON and SVG from `sim/`)
 - [ ] Deploy to GitHub Pages

@@ -6,7 +6,7 @@ Mechanics and formulas are defined in `product-spec.md`. This file explains how 
 
 ```
               +----------------------+
-  user  --->  |  Static web app      |  (Vite + React + TypeScript, GitHub Pages)
+  user  --->  |  Static web app      |  (Next.js static export + Tailwind, GitHub Pages)
   wallet      |  reads via RPC       |
               +----------+-----------+
                          | view calls and signed transactions (public RPC)
@@ -122,10 +122,11 @@ Measured in the sandbox (2026-11-09): `create_coin` 45.8 Tgas, `storage_deposit`
 
 ## 4. Web app (`web/`)
 
-- Vite + React + TypeScript. Built as static files, hosted on GitHub Pages.
+- Next.js 16 (App Router) + Tailwind CSS 4 + TypeScript (D-022). `output: 'export'` builds plain static files into `web/out`, hosted on GitHub Pages with `basePath` set to the repo name. No server code: no API routes, no server actions, no middleware, no `next/image` optimization (`images.unoptimized`).
+- Every page that touches the wallet or RPC is a client component. The coin page is `/coin/?id=<coin account>` (query parameter, read with `useSearchParams` inside `Suspense`), because coins are created at runtime and static export cannot pre-render unknown dynamic routes.
 - Wallet connection: NEAR Wallet Selector (`@near-wallet-selector/*`). Check the current recommended package in docs.near.org before starting M4. `@hot-labs/near-connect` is the alternative.
 - RPC reads: `near-api-js` (v7) view calls to the public testnet RPC.
-- Config comes from the single root `.env` (Vite `envDir: '..'`). Only `VITE_` variables reach the browser: `VITE_NETWORK`, `VITE_RPC_URL`, `VITE_FACTORY_ID`. No secrets.
+- Config comes from the single root `.env`: `web/next.config.ts` calls `loadEnvConfig` from `@next/env` on the repo root. Only `NEXT_PUBLIC_` variables reach the browser: `NEXT_PUBLIC_NETWORK`, `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_FACTORY_ID`. No secrets.
 
 Pages:
 
