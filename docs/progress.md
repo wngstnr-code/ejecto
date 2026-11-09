@@ -6,24 +6,22 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Item | Value |
 |---|---|
-| Phase | M0: Setup |
-| Overall | Research, simulation and docs are done. No contract code yet. |
+| Phase | M0 done, M1 next |
+| Overall | Research, simulation, docs, repo and testnet accounts are done. No contract code yet. |
 | Deadline | 2026-11-14 23:59 UTC (2026-11-15 06:59 WIB) |
 | Days left | 5 (as of 2026-11-09) |
 
 ## Next step (exact)
 
-1. Done: `cargo-near` 0.23.0 and `near-cli-rs` 0.31.1 are installed.
-2. Wait for the user to fund `FUNDER_ACCOUNT` (in `.env`) with the faucet, about 30 NEAR.
-3. Write and run `scripts/setup-accounts` to create `ejecto.testnet` and its sub-accounts (`build-and-deploy.md` section 2).
-4. Start M1: scaffold `contracts/coin`.
+1. Start M1: scaffold `contracts/coin` (near-sdk 5.x) as described in `development-plan.md`.
+2. Ask the user to top up `ejecto.testnet` at near-faucet.io before M3 (deployments need more NEAR).
 4. Before the deadline, ask the user to make the repo public (it is private now).
 
 ## Blockers and open questions
 
 | Question | Owner | Status |
 |---|---|---|
-| Funder account funded with the faucet | user | open |
+| Top up `ejecto.testnet` to 20 to 30 NEAR before M3 | user | open |
 | When to make the GitHub repo public (must be public before the deadline) | user | open |
 | Wallet package for the web app (Wallet Selector or near-connect) | dev, check docs before M4 | open |
 
@@ -31,7 +29,7 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Milestone | Status |
 |---|---|
-| M0 Setup | in progress |
+| M0 Setup | done |
 | M1 Coin contract core | not started |
 | M2 Accounting, detector, EJECT, claim | not started |
 | M3 Factory and testnet | not started |
@@ -42,8 +40,10 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | What | Account | Notes |
 |---|---|---|
-| Funder (implicit) | see `FUNDER_ACCOUNT` in `.env` | Keypair in the local keychain, waiting for faucet funds |
-| Master | `ejecto.testnet` | Not created yet |
+| Master, funder, factory owner | `ejecto.testnet` | Created by the faucet service, 10 NEAR, now about 6.86 NEAR |
+| Factory (no code yet) | `factory.ejecto.testnet` | 1 NEAR |
+| Protocol fees | `fees.ejecto.testnet` | 0.1 NEAR |
+| Demo holders | `ani`, `budi`, `cici`, `whale` `.ejecto.testnet` | 0.5 NEAR each |
 
 ## Repository
 
@@ -60,6 +60,7 @@ Update this file at the end of every session and after every milestone. Newest e
 - Ran the 60-day simulation (500 runs x 400 traders). Key results are in `research.md`.
 - Wrote the docs set. Moved the simulation to `sim/`, translated its labels to English, and added `scripts/check-dashes.mjs`.
 - Removed obsolete files: the Indonesian research docs (replaced by English docs) and the Segel proof of concept.
-- Generated the funder keypair and moved all config to a single root `.env` (template `.env.example`).
+- Moved all config to a single root `.env` (template `.env.example`).
+- near-faucet.io rejected a fresh implicit account, so `ejecto.testnet` was created with the NEAR faucet service (10 NEAR), then the sub-accounts were created from it.
 - Initialized git and created the private GitHub repo `wngstnr-code/ejecto`. Initial work pushed as split commits.
 - Research PDFs in Indonesian are on the user's Desktop (`Ejecto-Riset-Mendalam.pdf`, `Segel-Riset-Mendalam.pdf`). They are outside the repo and are not part of the submission.
