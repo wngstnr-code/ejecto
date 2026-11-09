@@ -6,15 +6,16 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Item | Value |
 |---|---|
-| Phase | M2 done (parity check moved to M3), M3 next |
-| Overall | Coin contract feature complete for the MVP: token, curve, fees, fund, accounting, detector, EJECT, claim. 60 unit tests, wasm 237 KB. |
+| Phase | M3 done, M4 (web app) next |
+| Overall | Contracts done and live on testnet: factory plus a verified full lifecycle of a real coin. 63 coin unit tests, 12 factory unit tests, 2 sandbox integration tests. |
 | Deadline | 2026-11-14 23:59 UTC (2026-11-15 06:59 WIB) |
 | Days left | 5 (as of 2026-11-09) |
 
 ## Next step (exact)
 
-1. Start M3: `contracts/factory` (keyless `create_coin`, registry views, refunds), then a `near-workspaces` integration test (launch, keyless check, init twice rejected, full lifecycle with a short day length, gas measurement).
-2. M3 also: parity check sim vs contract on one fixed scenario, and a contract-level wash trading test.
+1. Start M4: `web/` with Vite + React + TypeScript. First check docs.near.org for the currently recommended wallet package (Wallet Selector or near-connect).
+2. Pages: Home (coin list from `factory.ejecto.testnet`), Launch, Coin (engine meter, your seat, buy, sell, EJECT, claim, DEMO TIME banner), Simulation.
+3. For the demo video, launch a fresh demo coin (about 2.68 NEAR). `ejecto.testnet` has about 5.6 NEAR, so a top-up helper may be needed (see `build-and-deploy.md`).
 4. Before the deadline, ask the user to make the repo public (it is private now).
 
 ## Blockers and open questions
@@ -32,7 +33,7 @@ Update this file at the end of every session and after every milestone. Newest e
 | M0 Setup | done |
 | M1 Coin contract core | done |
 | M2 Accounting, detector, EJECT, claim | done (parity check moved to M3) |
-| M3 Factory and testnet | not started |
+| M3 Factory and testnet | done |
 | M4 Web app | not started |
 | M5 Submission | not started |
 
@@ -57,12 +58,21 @@ Update this file at the end of every session and after every milestone. Newest e
 | Late whale and sybil attacks | Contract tests confirm: whale loses at least 20%, sybil split changes nothing |
 | Anyone can keep a coin alive by buying at least the threshold every 14 days | By design: those buys pay fees into the fund for the holders, and holders can still sell any time |
 
+### M3 deep review (2026-11-09)
+
+| Finding | Fix |
+|---|---|
+| The factory did not validate name, icon and day length, so bad input failed inside the async batch and the refund relied on the factory's free balance (about 0.9 NEAR versus a 2.67 NEAR deposit) | Validated synchronously now (D-016). Three unit tests added. Redeployed and checked live: an empty name is rejected at once. |
+| Promises were dropped with `let _ =` | Replaced with near-sdk `.detach()`, which states the intent. |
+| Pro-rata reserve split favors early buyers (sandbox: 5 NEAR in, 7.52 out; 8 NEAR in, 6.03 out) | Not a bug, it is how bonding curves work. Documented in `research.md` section 6 and the demo script. |
+
 ## Known issues
 
 | Severity | Issue | Plan |
 |---|---|---|
 | low | If the protocol account does not exist, `withdraw_protocol_fees` zeroes the counter and the failed transfer refunds the NEAR to the coin, where it is no longer tracked | The factory always sets a real account. Revisit after M3. |
-| low | Gas of `buy`, `sell`, `eject` and `claim` is not measured yet | Measure in the M3 integration test. |
+| low | If an unexpected failure happens inside the launch batch, the refund comes from the factory's free balance, which is smaller than one launch deposit | Bad input is now rejected before the batch, so this needs an unexpected runtime failure. Keep at least one launch deposit of free balance on the factory before a public launch. |
+| low | The factory keeps a full-access key and an owner during the hackathon (D-017) | Launched coins are unaffected. Lock or hand over before any mainnet use. |
 | low | If an `ft_transfer_call` refund lands after the sender already claimed, those refunded tokens cannot be claimed (their share stays in the contract) | Very unlikely (needs EJECT and a claim between the call and its callback). Accept for the MVP. |
 
 ## Testnet deployments
@@ -70,6 +80,8 @@ Update this file at the end of every session and after every milestone. Newest e
 | What | Account | Notes |
 |---|---|---|
 | Master, funder, factory owner | `ejecto.testnet` | Created by the faucet service. About 16.8 NEAR after a top-up on 2026-11-09 |
+| Factory | `factory.ejecto.testnet` | Deployed 2026-11-09 (tx `6QeDtBpSimeVCi1vv4RMcWyG2DY2jQA9mYN4Vx41GNoJ`), code updated (tx `BtpTqJNzXRABe1gMDAhfJpmdvH9ykqLP7QFoib2MZkd2`). Coin code hash `2aeac3797b6065b74acebb19014419b755e039b657857d77b013c6d519d71398`, launch deposit 2.6709 NEAR |
+| Verification coin (ejected) | `seato.factory.ejecto.testnet` | Launched (tx `CKQoSYdagkzE2rRt69MsqChDc3JMMP9MfPHNiB5Wnjxq`), 0 access keys, demo time 10 s per day. Ani 1, Budi 1.2, Cici 0.6 NEAR buys, Cici sold half. EJECT tx `BR59JVbnNF3zke6wc4c3aRoryFj1CQ7DxRxKxDV4f2Tu`. Claims: Ani 1.2769, Budi 1.0055, Cici 0.2080 NEAR, each equal to the holder view. 2 yocto dust left. |
 | Top-up helper | `ejecto-topup1.testnet` | Created by the faucet service, sent 9.95 NEAR to the master, about 0.05 NEAR left |
 | Factory (no code yet) | `factory.ejecto.testnet` | 1 NEAR |
 | Protocol fees | `fees.ejecto.testnet` | 0.1 NEAR |
@@ -86,6 +98,7 @@ Update this file at the end of every session and after every milestone. Newest e
 
 ### 2026-11-09
 
+- M3 done: factory contract (keyless launch, registry, refunds, synchronous argument checks), sandbox integration tests with gas numbers, parity and wash tests, factory deployed to testnet, real coin `$SEATO` launched, traded, ejected and claimed on testnet.
 - M2 done: holder accounting, transfer and refund hooks, alive detector, EJECT, claim, `holder` view, events. 60 unit tests. Found and fixed a u128 overflow in `moved_basis` and a test isolation problem.
 - M1 done: `contracts/` Cargo workspace, `ejecto-coin` crate (curve, token, fees, fund, protocol fees, quotes, status), 34 unit tests, clippy clean, wasm 211 KB via `cargo near build`.
 - Rewrote git history to remove all traces of the local assistant file, force pushed while the repo is private.
