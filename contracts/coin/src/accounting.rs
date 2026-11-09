@@ -89,6 +89,21 @@ impl Ledger {
         self.set_basis(h, 0);
     }
 
+    /// Weight is tied to tokens: selling or sending `amount` out of `balance` destroys the
+    /// same fraction of the holder's weight (it never moves to anyone). Sending or selling
+    /// everything is a full exit. Call `touch` first. Returns true on a full exit.
+    pub fn shed(&mut self, h: &mut Holder, amount: u128, balance: u128) -> bool {
+        if amount >= balance {
+            self.leave_ship(h);
+            return true;
+        }
+        use crate::curve::U512;
+        let gone = (U512::from(h.weight) * U512::from(amount) / U512::from(balance)).low_u128();
+        h.weight -= gone;
+        self.w_total -= gone;
+        false
+    }
+
     /// Holder weight accrued up to `now` without mutating state.
     pub fn live_weight(h: &Holder, now: u64) -> u128 {
         let extra = if now > h.last_ts {
@@ -225,6 +240,21 @@ mod tests {
         assert_eq!(a.basis, 0);
         assert_eq!(l.w_total, 0);
         assert_eq!(l.s_pos, 0);
+    }
+
+    #[test]
+    fn shed_removes_weight_pro_rata() {
+        let mut l = Ledger::new(0);
+        let mut a = Holder::default();
+        l.touch(&mut a, 0);
+        l.set_basis(&mut a, 10 * NEAR);
+        l.touch(&mut a, 10 * DAY);
+        let w = a.weight;
+        assert!(!l.shed(&mut a, 25, 100));
+        assert_eq!(a.weight, w - w / 4);
+        assert_eq!(l.w_total, a.weight);
+        assert!(l.shed(&mut a, 75, 75), "sending the rest is a full exit");
+        assert_eq!((a.weight, a.basis, l.w_total, l.s_pos), (0, 0, 0, 0));
     }
 
     #[test]
