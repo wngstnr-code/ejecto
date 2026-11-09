@@ -53,8 +53,10 @@ Done when: a coin launched on testnet has zero access keys (visible in an explor
 
 ### M4: Web app (2026-11-13)
 
-- [ ] Next.js + Tailwind + TS scaffold (static export), wallet connection, RPC views
-- [ ] Home, Launch, Coin pages (engine meter, your seat, EJECT, claim, DEMO TIME banner)
+- [x] Next.js + Tailwind + TS scaffold (static export), RPC views
+- [x] Landing page with the 3D pilot, live chain stats and model charts
+- [ ] Wallet connection
+- [ ] Coins, Launch, Coin pages (engine meter, your seat, EJECT, claim, DEMO TIME banner)
 - [ ] Simulation page (static JSON and SVG from `sim/`)
 - [ ] Deploy to GitHub Pages
 

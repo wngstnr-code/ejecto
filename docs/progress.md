@@ -6,17 +6,18 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Item | Value |
 |---|---|
-| Phase | M3 done, M4 (web app) next |
-| Overall | Contracts reviewed (M1 to M3), fixed and live on testnet. 71 coin unit tests, 15 factory unit tests, 3 sandbox integration tests. |
+| Phase | M4 (web app) in progress: landing done, app pages next |
+| Overall | Contracts reviewed (M1 to M3), fixed and live on testnet. 71 coin unit tests, 15 factory unit tests, 3 sandbox integration tests. Landing page done in `web/` (Next.js 16 static export). |
 | Deadline | 2026-11-14 23:59 UTC (2026-11-15 06:59 WIB) |
-| Days left | 5 (as of 2026-11-09) |
+| Days left | 4.5 (as of 2026-11-10) |
 
 ## Next step (exact)
 
-1. Start M4: `web/` with Next.js + Tailwind + TypeScript, static export (D-022) (contracts are reviewed and redeployed). First check docs.near.org for the currently recommended wallet package (Wallet Selector or near-connect).
-2. Pages: Home (coin list from `factory.ejecto.testnet`), Launch, Coin (engine meter, your seat, buy, sell, EJECT, claim, DEMO TIME banner), Simulation.
-3. For the demo video, launch a fresh demo coin (about 2.68 NEAR). `ejecto.testnet` has about 5.6 NEAR, so a top-up helper may be needed (see `build-and-deploy.md`).
-4. Before the deadline, ask the user to make the repo public (it is private now).
+1. Wallet: check docs.near.org for the currently recommended package (Wallet Selector or `@hot-labs/near-connect`), add a connect button to the header.
+2. App pages in `web/app/`: `/coins/` (coin list from `factory.ejecto.testnet`), `/launch/`, `/coin/?id=` (engine meter, your seat, buy, sell with storage_deposit batch, EJECT, claim, DEMO TIME banner). Reuse the landing tokens and components. The landing buttons already link to `/coins/` and `/launch/`.
+3. Deploy to GitHub Pages with `NEXT_PUBLIC_BASE_PATH=/ejecto`, then check mobile layouts.
+4. For the demo video, launch a fresh demo coin (about 2.68 NEAR). `ejecto.testnet` has about 5.6 NEAR, so a top-up helper may be needed (see `build-and-deploy.md`).
+5. Before the deadline, ask the user to make the repo public (it is private now).
 
 ## Blockers and open questions
 
@@ -24,7 +25,8 @@ Update this file at the end of every session and after every milestone. Newest e
 |---|---|---|
 | More NEAR if M3 or M4 needs it (near-faucet.io still errors, use another faucet-service helper account with the user's OK) | user | open |
 | When to make the GitHub repo public (must be public before the deadline) | user | open |
-| Wallet package for the web app (Wallet Selector or near-connect) | dev, check docs before M4 | open |
+| Wallet package for the web app (Wallet Selector or near-connect) | dev, check docs before the app pages | open |
+| Source and license of the pilot GLB (needed for the README credits) | user | open |
 
 ## Milestone checklist
 
@@ -34,7 +36,7 @@ Update this file at the end of every session and after every milestone. Newest e
 | M1 Coin contract core | done |
 | M2 Accounting, detector, EJECT, claim | done (parity check moved to M3) |
 | M3 Factory and testnet | done |
-| M4 Web app | not started |
+| M4 Web app | in progress (landing done) |
 | M5 Submission | not started |
 
 ## Review notes
@@ -92,6 +94,8 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 | low | If the protocol account does not exist, `withdraw_protocol_fees` zeroes the counter and the failed transfer refunds the NEAR to the coin, where it is no longer tracked | The factory always sets a real account. Revisit after M3. |
 | low | The factory keeps a full-access key and an owner during the hackathon (D-017) | Launched coins are unaffected. Lock or hand over before any mainnet use. |
 | medium | Peak inflation griefing: a big buy followed by a sell raises `peak_window`, so 14 days later a still-active coin can fall below 5% of the fake peak and be ejected | Costly (about 4% of the fake peak, most of it paid into the fund) and nobody can steal anything, since holders get a fair pro-rata exit. Possible later fix: let the peak decay over time. |
+| low | Landing not yet checked on phone widths. The 3D layer has narrow-screen poses but no real-device test | Check after the app pages, before recording the demo. |
+| low | `web/public/mascot/ejecto-pilot.glb` is 2.4 MB, most of it one PNG texture | Fine for the demo. Could convert the texture to WebP to cut it about in half. |
 | low | If a sender's `ft_transfer_call` is still in flight at EJECT and the receiver keeps the tokens, the sender keeps the matching weight without the tokens, so that small fund share stays unclaimed | Needs a transfer call to cross the EJECT moment. Accept for the MVP. |
 
 ## Testnet deployments
@@ -114,6 +118,14 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 | Default branch | `main` |
 
 ## Session log
+
+### 2026-11-10
+
+- M4 started. Scaffolded `web/` with Next.js 16.4.5, Tailwind 4, TypeScript, static export, root `.env` via `@next/env`, `agentRules: false` (stops Next from writing an `AGENTS.md` full of em dashes).
+- Built the landing page section by section with the user: preloader, hero with a marquee wordmark, typewriter problem statement, pinned crash chart with a stage timeline, pinned "How it works" card stack, "The math" ledger with hover wipes and striped bars, "Safeguards" spec board with live chain reads, centered final call to action, footer with a hover wordmark, custom scrollbar, heavy Lenis scroll.
+- Added the 3D pilot layer (D-024): scroll choreography, ejection up and left, parachute rigging, zig-zag drifts with banking and a pendulum roll, drag to spin, leg swing and head shake in a vertex shader.
+- `sim/ejecto-sim.mjs` now also writes `example-series.json` (14-day buys, alive line, per-coin loss totals). Results unchanged.
+- Checked every section in the browser at desktop width. Typecheck, lint and the dash check pass.
 
 ### 2026-11-09
 
