@@ -40,27 +40,25 @@ pub struct Coin {
     day_length_sec: u64, launch_ts: u64,
     protocol_account: AccountId, factory: AccountId,
 
-    // token
-    balances: LookupMap<AccountId, Holder>,
-    supply: u128,                           // raw units, 18 decimals
+    // token: balances, total supply and NEP-145 storage (near-contract-standards)
+    token: FungibleToken,
 
     // money (yoctoNEAR)
     reserve: u128, fund: u128, protocol_fees: u128,
 
-    // accounting
-    s_pos: u128,                            // sum of max(0, basis)
-    w_total: U256,                          // sum of weights (yocto x seconds)
-    last_global_ts: u64,
+    // accounting (accounting.rs)
+    holders: LookupMap<AccountId, Holder>,
+    ledger: Ledger,                         // s_pos, w_total, last_ts
 
-    // alive detector
-    buckets: [(u64 /*day*/, u128 /*yocto*/); 14],
-    peak_window: u128,
+    // alive detector (detector.rs): 14 x (day, yocto) buckets and peak_window
+    detector: Detector,
 
     // terminal state
-    ejected: Option<EjectSnapshot>,         // reserve_e, supply_e, fund_e, w_e, t_e
+    ejected: Option<EjectSnapshot>,         // t_e, reserve_e, supply_e, fund_e, w_e
 }
 
-pub struct Holder { balance: u128, basis: i128, weight: U256, last_ts: u64, claimed: bool }
+// weight is in (yoctoNEAR / 10^12) x seconds, so u128 is enough
+pub struct Holder { basis: i128, weight: u128, last_ts: u64, claimed: bool }
 ```
 
 ### Methods
@@ -88,7 +86,7 @@ There are no owner-only methods. There is no upgrade method.
 - Buy solves the quadratic with an integer square root (Newton, starting from `2^ceil(bits/2)`), then binary searches a window of 256 raw units around the root for the largest `d` whose exact cost fits. Gas stays small and constant.
 - Module layout in `contracts/coin/src/`: `curve.rs` (curve math), `accounting.rs` (holder basis and weight, claim parts), `detector.rs` (14 buckets, peak, threshold), `events.rs`, `lib.rs` (contract and NEP wrappers), `tests.rs` (contract unit tests). Pure modules carry their own unit tests.
 - Holder accounting entries live in a `near_sdk::store::LookupMap<AccountId, Holder>`. At init the contract measures one entry and adds it to the NEP-145 per-account storage, so `storage_deposit` pays for both the balance and the accounting entry.
-- Every path that changes token balances goes through the accounting: `buy`, `sell`, `ft_transfer`, `ft_transfer_call`, `ft_resolve_transfer` (refund = transfer back) and `claim`.
+- Every path that changes token balances goes through the accounting: `buy`, `sell`, `ft_transfer`, `ft_resolve_transfer` (books the used part of an `ft_transfer_call`) and `claim`. `Ledger::shed` removes weight pro-rata when tokens leave a holder.
 - NEP-141 and NEP-145 come from `near-contract-standards` (`FungibleToken`), wrapped so Ejecto can add hooks (M2) and block forced unregister.
 - Rounding rules from the spec: tokens out and proceeds round down, fees round up, rounding dust goes to the fund.
 - Time: `env::block_timestamp()` is nanoseconds. Convert to seconds. `day = (now - launch_ts) / day_length_sec`.
@@ -113,10 +111,12 @@ Measured in the sandbox (2026-11-09): `create_coin` 45.8 Tgas, `storage_deposit`
 | `set_coin_code(code)` | owner only | Stores the coin wasm. Development convenience. |
 | `create_coin(name, symbol, icon, fee_preset, day_length_sec)` | payable | Validates args, creates `<symbol>.<factory>`, transfers the storage deposit, deploys the coin wasm, calls `new`. Adds **no access key**, so the coin account is keyless. Registers the coin in the list after the callback succeeds, and refunds on failure. |
 | `get_coins(from_index, limit)` / `get_coin(symbol)` | view | Coin registry for the web app |
+| `withdraw_refund()` / `pending_refund(account_id)` | call / view | Pull-based refunds of failed launches |
+| `migrate()` | private init | One-time migration from the first deployed state layout (`FactoryV1`) |
 
 - `set_coin_code` takes the raw wasm bytes as the call input (near-cli `file-args`), checks the `\0asm` magic, and stores the code in a `LazyOption` with its length and sha256 hash (shown by `get_config`, so anyone can compare it with a local build).
 - `launch_deposit = coin_code_len x storage_byte_cost + 0.3 NEAR`. For the 237 KB coin this is about 2.67 NEAR. The deposit pays the new coin's storage.
-- `create_coin` sends one batch to the new account: `create_account`, `transfer(deposit)`, `deploy_contract(code)`, `function_call(new)`. The batch is atomic, so a failed init reverts the account creation and the deposit returns to the factory. The callback `on_coin_created` registers the coin, or refunds the creator.
+- `create_coin` refunds anything above `launch_deposit` at once, then sends one batch to the new account: `create_account`, `transfer(launch_deposit)`, `deploy_contract(code)`, `function_call(new)`. The batch is atomic, so a failed init reverts the account creation and the deposit returns to the factory. The callback `on_coin_created` registers the coin on success (and never refunds on success). On failure it books a pending refund, because the system refund of the failed batch may reach the factory only after the callback.
 - The factory keeps an owner during development so we can update the coin code. Coins already launched are never affected, because each coin is keyless and has no upgrade path.
 - Optimization to check later: NEAR global contracts can deploy coin code by reference and reduce the launch deposit. Use plain code deployment for the MVP.
 
