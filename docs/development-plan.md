@@ -10,12 +10,12 @@ The deadline is **2026-11-14 23:59 UTC** (2026-11-15 06:59 WIB). Every milestone
 - [x] 60-day simulation (`sim/ejecto-sim.mjs`)
 - [x] Docs
 - [x] Install `cargo-near` 0.23.0 and `near-cli-rs` 0.31.1
-- [x] Funder keypair generated, single root `.env` and `.env.example`
-- [ ] User: fund the funder account with the faucet (about 30 NEAR)
-- [ ] `scripts/setup-accounts`: create `ejecto.testnet` and its sub-accounts, distribute NEAR
+- [x] Single root `.env` and `.env.example`
+- [x] Testnet accounts: `ejecto.testnet` (10 NEAR from the faucet service) and sub-accounts `factory`, `fees`, `ani`, `budi`, `cici`, `whale`
+- [ ] User: top up `ejecto.testnet` at near-faucet.io when needed (target 20 to 30 NEAR in total)
 - [x] `git init` and private GitHub repo `wngstnr-code/ejecto` (make it public before the deadline)
 
-Done when: `cargo near --version` and `near --version` work, and the accounts exist.
+Done when: `cargo near --version` and `near --version` work, and the accounts exist. (Done on 2026-11-09.)
 
 ### M1: Coin contract core (2026-11-10)
 
