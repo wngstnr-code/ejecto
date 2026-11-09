@@ -75,7 +75,7 @@ pub struct Holder { balance: u128, basis: i128, weight: U256, last_ts: u64, clai
 | `eject()` | call | anyone | Only when the alive rule allows it |
 | `claim()` | call | holder | Pull-based payout after EJECT |
 | `withdraw_protocol_fees()` | call | anyone | Sends to the fixed protocol account |
-| `status()` | view | anyone | Price, supply, reserve, fund, window buys, threshold, age, ejectable flag, ejected snapshot, params |
+| `status()` | view | anyone | Price, supply, reserve, fund, day, window buys, peak, threshold, ejectable flag, total weight, ejected snapshot, params |
 | `holder(account_id)` | view | anyone | Balance, basis, live weight, estimated claim if ejected now |
 | `quote_buy(amount)` / `quote_sell(amount)` | view | anyone | For the UI |
 
@@ -86,7 +86,9 @@ There are no owner-only methods. There is no upgrade method.
 - Amounts are `u128` yoctoNEAR. Token amounts are `u128` raw units (10^18 per token).
 - Intermediate products (for example `supply^2`) use a 512-bit integer (`uint` crate, `construct_uint!`) so no allowed input can overflow.
 - Buy solves the quadratic with an integer square root (Newton, starting from `2^ceil(bits/2)`), then binary searches a window of 256 raw units around the root for the largest `d` whose exact cost fits. Gas stays small and constant.
-- Pure curve math lives in `contracts/coin/src/curve.rs`. The contract lives in `lib.rs`, events in `events.rs`, unit tests in `tests.rs`.
+- Module layout in `contracts/coin/src/`: `curve.rs` (curve math), `accounting.rs` (holder basis and weight, claim parts), `detector.rs` (14 buckets, peak, threshold), `events.rs`, `lib.rs` (contract and NEP wrappers), `tests.rs` (contract unit tests). Pure modules carry their own unit tests.
+- Holder accounting entries live in a `near_sdk::store::LookupMap<AccountId, Holder>`. At init the contract measures one entry and adds it to the NEP-145 per-account storage, so `storage_deposit` pays for both the balance and the accounting entry.
+- Every path that changes token balances goes through the accounting: `buy`, `sell`, `ft_transfer`, `ft_transfer_call`, `ft_resolve_transfer` (refund = transfer back) and `claim`.
 - NEP-141 and NEP-145 come from `near-contract-standards` (`FungibleToken`), wrapped so Ejecto can add hooks (M2) and block forced unregister.
 - Rounding rules from the spec: tokens out and proceeds round down, fees round up, rounding dust goes to the fund.
 - Time: `env::block_timestamp()` is nanoseconds. Convert to seconds. `day = (now - launch_ts) / day_length_sec`.
