@@ -98,7 +98,11 @@ pub fn tokens_for_net(s: u128, net: u128) -> (u128, u128) {
     let c = denom() * u(net);
     let disc = b * b + u(4) * u(K) * c;
     let root = isqrt(disc);
-    let mut d = if root > b { (root - b) / (u(2) * u(K)) } else { U512::zero() };
+    let mut d = if root > b {
+        (root - b) / (u(2) * u(K))
+    } else {
+        U512::zero()
+    };
     let room = u(MAX_SUPPLY - s);
     if d > room {
         d = room;
@@ -149,8 +153,21 @@ mod tests {
 
     #[test]
     fn tokens_for_net_is_maximal_and_within_budget() {
-        let supplies = [0u128, 1, ONE_TOKEN, 123_456_789 * ONE_TOKEN + 77, 2_000_000_000 * ONE_TOKEN];
-        let nets = [1u128, 1_000, NEAR / 1000, NEAR, 37 * NEAR + 12_345, 500 * NEAR];
+        let supplies = [
+            0u128,
+            1,
+            ONE_TOKEN,
+            123_456_789 * ONE_TOKEN + 77,
+            2_000_000_000 * ONE_TOKEN,
+        ];
+        let nets = [
+            1u128,
+            1_000,
+            NEAR / 1000,
+            NEAR,
+            37 * NEAR + 12_345,
+            500 * NEAR,
+        ];
         for &s in &supplies {
             for &n in &nets {
                 let (d, cost) = tokens_for_net(s, n);
@@ -179,7 +196,19 @@ mod tests {
 
     #[test]
     fn isqrt_is_floor() {
-        for n in [0u64, 1, 2, 3, 4, 15, 16, 17, 1_000_000, 999_999_999_999, u64::MAX] {
+        for n in [
+            0u64,
+            1,
+            2,
+            3,
+            4,
+            15,
+            16,
+            17,
+            1_000_000,
+            999_999_999_999,
+            u64::MAX,
+        ] {
             let r = isqrt(U512::from(n));
             assert!(r * r <= U512::from(n));
             assert!((r + 1) * (r + 1) > U512::from(n));
