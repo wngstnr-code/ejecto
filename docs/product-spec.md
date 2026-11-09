@@ -142,6 +142,8 @@ Rules:
 
 All updates are O(1). There is never a loop over holders.
 
+Implementation note: weights use the basis scaled down by 10^12 yoctoNEAR (`WEIGHT_UNIT`), so weight units are (yoctoNEAR / 10^12) x seconds. The same scaled value feeds `S_pos`, holder weights and `W`, so the sum of holder weights equals `W` exactly. Basis below 10^-12 NEAR earns no weight (the minimum buy is 0.001 NEAR).
+
 ## 7. Alive detector
 
 - Buy volume is stored in 14 daily buckets (ring buffer, indexed by `day % 14`, each bucket tagged with its day number so stale buckets count as 0).
@@ -176,6 +178,15 @@ payout       = reserve_part + fund_part
 ```
 
 The holder's tokens are burned and `payout` is transferred. Claims are rounded down, so the sum of all claims never exceeds `reserve_e + fund_e`. Leftover dust stays in the contract.
+
+Edge cases:
+
+| Case | Rule |
+|---|---|
+| EJECT with supply 0 (nobody on board) | The fund moves to protocol fees, since nobody can claim it. `fund_e = 0`. |
+| `W_e == 0` but supply > 0 (no holder has positive weight) | The fund is split pro-rata by tokens, like the reserve. |
+| An `ft_transfer_call` refund resolves after EJECT | Only tokens move back. Accounting is frozen, so weights still sum to `W_e`. |
+| A holder already claimed | `claim` panics. The `holder` view shows zero parts. |
 
 ## 9. Protocol fees
 
