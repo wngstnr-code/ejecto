@@ -36,24 +36,47 @@ near --version
 
 Config lives in **one file**: `.env` at the repo root (gitignored). `.env.example` is the committed template. It holds account names and network settings only. Private keys live only in the local NEAR keychain (`~/.near-credentials/testnet/<account>.json`, file mode 600).
 
-Accounts are prepared by script. The only manual step is funding the funder with the faucet.
+Accounts are prepared with near-cli. The only manual step is topping up with the faucet.
 
-| Account | Purpose | Created how |
+| Account | Purpose | Initial balance |
 |---|---|---|
-| `FUNDER_ACCOUNT` (implicit, 64 hex chars) | Pays for everything | Keypair generated locally. Exists on-chain once the user funds it. |
-| `ejecto.testnet` (`MASTER_ACCOUNT`, `OWNER_ACCOUNT`) | Parent of all named accounts, factory owner | Funder calls the `testnet` registrar `create_account` |
-| `factory.ejecto.testnet` | Factory contract. Coins become `<symbol>.factory.ejecto.testnet`. | Sub-account of the master |
-| `fees.ejecto.testnet` | Receives protocol fees | Sub-account of the master |
-| `ani`, `budi`, `cici`, `whale` `.ejecto.testnet` | Demo holders and the attack demo | Sub-accounts of the master |
+| `ejecto.testnet` (`FUNDER_ACCOUNT`, `MASTER_ACCOUNT`, `OWNER_ACCOUNT`) | Pays for everything, parent of all named accounts, factory owner | 10 NEAR from the faucet service |
+| `factory.ejecto.testnet` | Factory contract. Coins become `<symbol>.factory.ejecto.testnet`. | 1 NEAR |
+| `fees.ejecto.testnet` | Receives protocol fees | 0.1 NEAR |
+| `ani`, `budi`, `cici`, `whale` `.ejecto.testnet` | Demo holders and the attack demo | 0.5 NEAR each |
 
-Funding target: about 30 testnet NEAR on the funder (minimum 15). The faucet can be used more than once. Rough budget: factory storage for the coin code (about 3 NEAR), each coin launch (about 3 NEAR), demo buys (about 5 NEAR per demo account).
+All accounts were created on 2026-11-09. Keys are in `~/.near-credentials/testnet/` (legacy keychain format, mode 600).
 
-Steps:
+How they were created (for reference, do not re-run):
 
-1. Done: the funder keypair is generated and saved in the keychain. Its account id is in `.env`.
-2. The user funds `FUNDER_ACCOUNT` with the testnet faucet (for example https://near-faucet.io).
-3. Run `scripts/setup-accounts` (written in M0) to create the master and sub-accounts and distribute NEAR.
-4. Record the result in `progress.md` (names only, never keys).
+```bash
+# master account, funded by the NEAR faucet service (about 10 NEAR)
+near account create-account sponsor-by-faucet-service ejecto.testnet \
+  autogenerate-new-keypair save-to-legacy-keychain network-config testnet create
+
+# each sub-account, funded by the master
+near account create-account fund-myself factory.ejecto.testnet '1 NEAR' \
+  autogenerate-new-keypair save-to-legacy-keychain \
+  sign-as ejecto.testnet network-config testnet sign-with-legacy-keychain send
+```
+
+Topping up:
+
+- https://near-faucet.io only accepts accounts that already exist (a fresh implicit account is rejected as "Invalid account") and gives small amounts per request. Use it with `ejecto.testnet`.
+- Move NEAR from the master to a sub-account when needed:
+
+```bash
+near tokens ejecto.testnet send-near factory.ejecto.testnet '3 NEAR' \
+  network-config testnet sign-with-legacy-keychain send
+```
+
+Check a balance:
+
+```bash
+near account view-account-summary ejecto.testnet network-config testnet now
+```
+
+Budget for the whole hackathon: about 20 to 30 NEAR. Factory storage for the coin code (about 3 NEAR), each coin launch (about 3 NEAR), demo buys (a few NEAR per demo account).
 
 ## 3. Contracts
 
