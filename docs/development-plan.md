@@ -17,14 +17,14 @@ The deadline is **2026-11-14 23:59 UTC** (2026-11-15 06:59 WIB). Every milestone
 
 Done when: `cargo near --version` and `near --version` work, and the accounts exist. (Done on 2026-11-09.)
 
-### M1: Coin contract core (2026-11-10)
+### M1: Coin contract core (2026-11-10, done 2026-11-09)
 
-- [ ] `contracts/coin` crate scaffold (near-sdk 5.x)
-- [ ] NEP-141 + NEP-145 + NEP-148 metadata
-- [ ] Curve math with 256-bit intermediates: `R(s)`, buy solve, sell
-- [ ] Fees and fee presets, Ejecto Fund, protocol fees, rounding dust
-- [ ] `buy`, `sell`, `quote_buy`, `quote_sell`, `status`
-- [ ] Unit tests: math round trips, fee splits, rounding favors the contract, invariant 1 and 2
+- [x] `contracts/coin` crate scaffold (near-sdk 5.30, Cargo workspace in `contracts/`)
+- [x] NEP-141 + NEP-145 + NEP-148 metadata
+- [x] Curve math with 512-bit intermediates: `R(s)`, buy solve, sell
+- [x] Fees and fee presets, Ejecto Fund, protocol fees, rounding dust
+- [x] `buy`, `sell`, `quote_buy`, `quote_sell`, `status`, `withdraw_protocol_fees`
+- [x] Unit tests: math round trips, fee splits, rounding favors the contract, invariant 1 and 2 (34 tests)
 
 Done when: `cargo test` passes and buying then selling everything returns the reserve to 0 with no loss to the contract.
 
