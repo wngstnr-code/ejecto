@@ -6,7 +6,7 @@ import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { asset } from "@/lib/config";
 import { prefersReducedMotion, ScrollTrigger } from "@/lib/gsap";
-import { LAUNCH_START, pilotScroll } from "@/lib/pilot-scroll";
+import { DRAW_END, LAUNCH_START, pilotScroll } from "@/lib/pilot-scroll";
 
 const MODEL_URL = asset("/mascot/ejecto-pilot.glb");
 const MODEL_HEIGHT = 1.35;
@@ -243,9 +243,17 @@ function Pilot() {
     m.rollV += (28 * (rollTarget - m.roll) - 3.2 * m.rollV) * delta;
     m.roll += m.rollV * delta;
 
-    // Facing: at rest look toward the page content (left side faces right, right side faces left);
-    // while drifting, turn toward where you are going.
-    const restYaw = -THREE.MathUtils.clamp(g.position.x / (w * 0.28), -1, 1) * 0.4;
+    // Facing: outside the hero the pilot always looks at the section content, which sits on the other
+    // side of the screen (pilot on the right looks left, pilot on the left looks right). The hero keeps
+    // its free three-quarter pose. While drifting, it also turns toward where it is going.
+    const inHero = 1 - a;
+    const lookYaw = -THREE.MathUtils.clamp(g.position.x / (w * 0.15), -1, 1) * 0.8;
+    let restYaw = THREE.MathUtils.lerp(lookYaw, -0.35, inHero);
+    // The Crash: follow the chart's moving head. It starts far left and travels right toward the pilot,
+    // so the gaze turns from hard left toward the middle as the days go by.
+    const chartT = ease(clamp01(pilotScroll.crash / DRAW_END));
+    const crashLook = THREE.MathUtils.lerp(-0.9, -0.08, chartT);
+    restYaw = THREE.MathUtils.lerp(restYaw, crashLook, b * (1 - chuteOpen));
     const travelYaw = THREE.MathUtils.clamp(m.vx * 0.7, -1.1, 1.1);
 
     // Drag to spin (mouse only). Keeps some inertia, then eases back to the choreographed angle.
@@ -261,10 +269,16 @@ function Pilot() {
       }
     }
 
-    // Rotation: facing, a slow spin through the statement, pointer tilt, user drag, launch lean.
-    const spin = ease(clamp01((pilotScroll.statement - 0.15) / 0.7)) * Math.PI * 2 * (1 - b);
-    const targetY = restYaw + travelYaw + spin + turn + state.pointer.x * 0.3;
-    const targetX = -state.pointer.y * 0.12;
+    // Rotation: facing, a spin through the statement that ends facing the text, pointer tilt, user drag, launch lean.
+    // The Problem: one slow spin while the text types, ending turned to face the text on its left.
+    // The spin finishes when the section fills the screen (statement progress 0.5), same moment the typing ends.
+    const spin = ease(clamp01((pilotScroll.statement - 0.1) / 0.4)) * Math.PI * 2 * (1 - b);
+    // The pointer only nudges the gaze outside the hero, so the pilot keeps looking at the content.
+    const pointerWeight = THREE.MathUtils.lerp(0.08, 0.3, inHero);
+    const targetY = restYaw + travelYaw + spin + turn + state.pointer.x * pointerWeight;
+    // On the crash chart, lean in a little toward the chart below.
+    const lookDown = b * (1 - launch) * (1 - chuteOpen) * 0.16;
+    const targetX = -state.pointer.y * pointerWeight * 0.4 + lookDown;
     m.yaw = THREE.MathUtils.damp(m.yaw, targetY, 4, delta);
     g.rotation.y = m.yaw + u.rotY;
     g.rotation.x = THREE.MathUtils.damp(g.rotation.x, targetX + u.rotX, 4, delta);
