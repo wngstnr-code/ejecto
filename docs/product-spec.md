@@ -45,7 +45,7 @@ Users:
 
 ## 4. Launch
 
-`create_coin` on the factory creates `<symbol>.<factory-account>` and deploys the coin contract. The new account has no access keys. The factory checks every launch argument before it starts the launch, so bad input fails at once and the deposit is refunded by the runtime.
+`create_coin` on the factory creates `<symbol>.<factory-account>` and deploys the coin contract. The new account has no access keys. The factory checks every launch argument before it starts the launch, so bad input fails at once and the deposit is refunded by the runtime. Exactly `launch_deposit` goes to the coin account; anything above it is refunded to the creator at once (a keyless coin could never return it). If the launch batch still fails, the deposit is booked as a pending refund that the creator withdraws with `withdraw_refund`.
 
 Launch arguments (all immutable afterwards):
 
@@ -70,7 +70,7 @@ Fixed at the factory level (same for every coin of this factory version):
 | Supply cap | 10 billion tokens (reserve at the cap is about 25,000 NEAR) |
 | Minimum buy | 0.001 NEAR |
 
-Initialization: `new` may only be called by the parent account (the factory) or by the coin account itself (fallback deploy without a factory).
+Initialization: `new` may only be called by the direct parent account (the factory, for example `factory.x` for `seato.factory.x`) or by the coin account itself (fallback deploy without a factory). Any other ancestor is rejected.
 
 ## 5. Bonding curve
 
@@ -136,9 +136,12 @@ Rules:
 | Event | Effect |
 |---|---|
 | Buy `x` NEAR | `b_i += x` |
-| Sell for `proceeds` NEAR | `b_i -= proceeds` |
-| Balance becomes 0 (full exit) | Leave the ship: `W -= w_i`, `w_i = 0`, `set_basis(i, 0)`. Loyalty weight is forfeited. |
-| Transfer `a` tokens from `i` to `j` | Move basis pro-rata: `moved = max(0, b_i) * a / balance_i`. `b_i -= moved`, `b_j += moved`. Weight does **not** move. `j` starts accruing from now. If `i` ends with balance 0, `i` leaves the ship. |
+| Sell `d` of `balance_i` tokens for `proceeds` NEAR | Shed weight: `w_i -= w_i * d / balance_i` (and `W` by the same amount). Then `b_i -= proceeds`. |
+| Balance becomes 0 (full exit by sell or transfer) | Leave the ship: `W -= w_i`, `w_i = 0`, `set_basis(i, 0)`. Loyalty weight is forfeited. |
+| `ft_transfer` of `a` tokens from `i` to `j` | Move basis pro-rata: `moved = max(0, b_i) * a / balance_i`. `b_i -= moved`, `b_j += moved`. The sender sheds the same fraction of weight. Weight never moves: `j` starts accruing from now. |
+| `ft_transfer_call` | No accounting while the tokens are in flight. In `ft_resolve_transfer`, only the part the receiver kept (`used`) is booked, as an `ft_transfer` from the sender's own basis and weight, with `balance_i = sender balance after the refund + used`. A refund can never touch the receiver's basis. |
+
+Weight is tied to the tokens still held. Keeping a little dust keeps only a dust share of the weight, and moving tokens to another account to sell there sheds the weight at home.
 
 All updates are O(1). There is never a loop over holders.
 
@@ -186,7 +189,7 @@ Edge cases:
 | EJECT with supply 0 (nobody on board) | The fund moves to protocol fees, since nobody can claim it. `fund_e = 0`. |
 | `W_e == 0` but supply > 0 (no holder has positive weight) | The fund is split pro-rata by tokens, like the reserve. |
 | An `ft_transfer_call` refund resolves after EJECT | Only tokens move back. Accounting is frozen, so weights still sum to `W_e`. |
-| A holder already claimed | `claim` panics. The `holder` view shows zero parts. |
+| A holder already claimed | `claim` can be called again if the holder holds tokens again (for example from a late `ft_transfer_call` refund). It pays the reserve part for the current balance. The fund part is paid only once. |
 
 ## 9. Protocol fees
 
