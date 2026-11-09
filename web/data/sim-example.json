@@ -1,0 +1,506 @@
+{
+ "model": true,
+ "seed": 59,
+ "ejectDay": 34,
+ "windowDays": 14,
+ "minAgeDays": 14,
+ "holdersAtEject": 164,
+ "fundAtEject": 41.18,
+ "reserveAtEject": 167.28,
+ "holdersLossBase": 312.34,
+ "holdersLossEj": 271.11,
+ "summary": {
+  "runs": 500,
+  "traders": 400,
+  "investedPerCoin": 1312.57,
+  "lossBasePerCoin": 387.96,
+  "lossEjectoPerCoin": 346.12,
+  "lossReductionPct": 10.78,
+  "wipedBasePct": 4.37,
+  "wipedEjectoPct": 0,
+  "ejectDayMedian": 28,
+  "ejectedWithin60Pct": 100
+ },
+ "days": [
+  {
+   "day": 0,
+   "windowBuys": 295.63,
+   "threshold": 14.78,
+   "reserve": 289.72,
+   "fund": 4.43,
+   "holders": 96
+  },
+  {
+   "day": 1,
+   "windowBuys": 527.46,
+   "threshold": 26.37,
+   "reserve": 308.27,
+   "fund": 12.08,
+   "holders": 159
+  },
+  {
+   "day": 2,
+   "windowBuys": 699.92,
+   "threshold": 35,
+   "reserve": 438.85,
+   "fund": 15.44,
+   "holders": 206
+  },
+  {
+   "day": 3,
+   "windowBuys": 806.49,
+   "threshold": 40.32,
+   "reserve": 429.99,
+   "fund": 19.3,
+   "holders": 235
+  },
+  {
+   "day": 4,
+   "windowBuys": 944.13,
+   "threshold": 47.21,
+   "reserve": 548.73,
+   "fund": 21.69,
+   "holders": 256
+  },
+  {
+   "day": 5,
+   "windowBuys": 995.44,
+   "threshold": 49.77,
+   "reserve": 573.45,
+   "fund": 22.97,
+   "holders": 263
+  },
+  {
+   "day": 6,
+   "windowBuys": 1070.79,
+   "threshold": 53.54,
+   "reserve": 587.24,
+   "fund": 25.3,
+   "holders": 267
+  },
+  {
+   "day": 7,
+   "windowBuys": 1097.33,
+   "threshold": 54.87,
+   "reserve": 601.38,
+   "fund": 25.94,
+   "holders": 273
+  },
+  {
+   "day": 8,
+   "windowBuys": 1126.41,
+   "threshold": 56.32,
+   "reserve": 613.85,
+   "fund": 26.7,
+   "holders": 275
+  },
+  {
+   "day": 9,
+   "windowBuys": 1144.34,
+   "threshold": 57.22,
+   "reserve": 618.2,
+   "fund": 27.23,
+   "holders": 276
+  },
+  {
+   "day": 10,
+   "windowBuys": 1148.01,
+   "threshold": 57.4,
+   "reserve": 585.28,
+   "fund": 28.02,
+   "holders": 272
+  },
+  {
+   "day": 11,
+   "windowBuys": 1162.71,
+   "threshold": 58.14,
+   "reserve": 585.43,
+   "fund": 28.52,
+   "holders": 274
+  },
+  {
+   "day": 12,
+   "windowBuys": 1167.88,
+   "threshold": 58.39,
+   "reserve": 575.78,
+   "fund": 28.89,
+   "holders": 271
+  },
+  {
+   "day": 13,
+   "windowBuys": 1170.67,
+   "threshold": 58.53,
+   "reserve": 577.04,
+   "fund": 28.96,
+   "holders": 273
+  },
+  {
+   "day": 14,
+   "windowBuys": 882.76,
+   "threshold": 58.53,
+   "reserve": 565.23,
+   "fund": 29.47,
+   "holders": 272
+  },
+  {
+   "day": 15,
+   "windowBuys": 654.38,
+   "threshold": 58.53,
+   "reserve": 537.19,
+   "fund": 30.15,
+   "holders": 267
+  },
+  {
+   "day": 16,
+   "windowBuys": 490.88,
+   "threshold": 58.53,
+   "reserve": 516.86,
+   "fund": 30.86,
+   "holders": 264
+  },
+  {
+   "day": 17,
+   "windowBuys": 389.46,
+   "threshold": 58.53,
+   "reserve": 496.99,
+   "fund": 31.44,
+   "holders": 259
+  },
+  {
+   "day": 18,
+   "windowBuys": 270.1,
+   "threshold": 58.53,
+   "reserve": 507.61,
+   "fund": 31.86,
+   "holders": 260
+  },
+  {
+   "day": 19,
+   "windowBuys": 221.85,
+   "threshold": 58.53,
+   "reserve": 427.68,
+   "fund": 33.56,
+   "holders": 255
+  },
+  {
+   "day": 20,
+   "windowBuys": 193.76,
+   "threshold": 58.53,
+   "reserve": 449.18,
+   "fund": 34.77,
+   "holders": 250
+  },
+  {
+   "day": 21,
+   "windowBuys": 171.24,
+   "threshold": 58.53,
+   "reserve": 445.66,
+   "fund": 34.98,
+   "holders": 245
+  },
+  {
+   "day": 22,
+   "windowBuys": 155.56,
+   "threshold": 58.53,
+   "reserve": 391.2,
+   "fund": 36.53,
+   "holders": 240
+  },
+  {
+   "day": 23,
+   "windowBuys": 142.66,
+   "threshold": 58.53,
+   "reserve": 342.69,
+   "fund": 37.68,
+   "holders": 236
+  },
+  {
+   "day": 24,
+   "windowBuys": 138.99,
+   "threshold": 58.53,
+   "reserve": 336.84,
+   "fund": 37.79,
+   "holders": 232
+  },
+  {
+   "day": 25,
+   "windowBuys": 124.29,
+   "threshold": 58.53,
+   "reserve": 324.43,
+   "fund": 38.04,
+   "holders": 225
+  },
+  {
+   "day": 26,
+   "windowBuys": 119.12,
+   "threshold": 58.53,
+   "reserve": 324.43,
+   "fund": 38.04,
+   "holders": 225
+  },
+  {
+   "day": 27,
+   "windowBuys": 116.33,
+   "threshold": 58.53,
+   "reserve": 309.93,
+   "fund": 38.33,
+   "holders": 221
+  },
+  {
+   "day": 28,
+   "windowBuys": 108.61,
+   "threshold": 58.53,
+   "reserve": 296.66,
+   "fund": 38.6,
+   "holders": 216
+  },
+  {
+   "day": 29,
+   "windowBuys": 105.16,
+   "threshold": 58.53,
+   "reserve": 234.47,
+   "fund": 39.84,
+   "holders": 200
+  },
+  {
+   "day": 30,
+   "windowBuys": 96.19,
+   "threshold": 58.53,
+   "reserve": 225.18,
+   "fund": 40.03,
+   "holders": 193
+  },
+  {
+   "day": 31,
+   "windowBuys": 91.05,
+   "threshold": 58.53,
+   "reserve": 219.21,
+   "fund": 40.15,
+   "holders": 190
+  },
+  {
+   "day": 32,
+   "windowBuys": 72.77,
+   "threshold": 58.53,
+   "reserve": 200.29,
+   "fund": 40.52,
+   "holders": 182
+  },
+  {
+   "day": 33,
+   "windowBuys": 69.71,
+   "threshold": 58.53,
+   "reserve": 180.26,
+   "fund": 40.93,
+   "holders": 172
+  },
+  {
+   "day": 34,
+   "windowBuys": 22.45,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 35,
+   "windowBuys": 18.43,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 36,
+   "windowBuys": 5.04,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 37,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 38,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 39,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 40,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 41,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 42,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 43,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 44,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 45,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 46,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 47,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 48,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 49,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 50,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 51,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 52,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 53,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 54,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 55,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 56,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 57,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 58,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  },
+  {
+   "day": 59,
+   "windowBuys": 0,
+   "threshold": 58.53,
+   "reserve": 0,
+   "fund": 0,
+   "holders": 0
+  }
+ ]
+}
