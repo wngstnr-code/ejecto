@@ -1,8 +1,10 @@
 //! Ejecto coin contract. Spec: docs/product-spec.md. Architecture: docs/architecture.md.
 //!
-//! M1 scope: NEP-141 token, bonding curve buy and sell, fee presets, Ejecto Fund,
-//! protocol fees, quotes and status. Holder accounting, the alive detector, EJECT and
-//! claim are added in M2.
+//! Modules:
+//! - `curve`: bonding curve math (spec section 5)
+//! - `accounting`: holder net basis x time (spec section 6)
+//! - `detector`: alive detector (spec section 7)
+//! - `events`: NEP-297 events
 
 use near_contract_standards::fungible_token::events::{FtBurn, FtMint};
 use near_contract_standards::fungible_token::metadata::{
@@ -15,13 +17,19 @@ use near_contract_standards::storage_management::{
     StorageBalance, StorageBalanceBounds, StorageManagement,
 };
 use near_sdk::json_types::U128;
+use near_sdk::store::LookupMap;
 use near_sdk::{
     env, near, require, AccountId, BorshStorageKey, NearToken, PanicOnDefault, Promise,
     PromiseOrValue,
 };
 
+pub mod accounting;
 pub mod curve;
+pub mod detector;
 mod events;
+
+use accounting::{claim_parts, moved_basis, Holder, Ledger};
+use detector::Detector;
 
 use curve::{price_at, proceeds_of_burn, reserve_at, tokens_for_net};
 
@@ -41,6 +49,7 @@ pub const REAL_DAY: u64 = 86_400;
 #[near]
 enum StorageKey {
     Token,
+    Holders,
 }
 
 #[near(serializers = [json, borsh])]
@@ -85,6 +94,44 @@ pub struct Coin {
     reserve: u128,
     fund: u128,
     protocol_fees: u128,
+
+    // holder accounting (spec section 6)
+    holders: LookupMap<AccountId, Holder>,
+    ledger: Ledger,
+
+    // alive detector (spec section 7)
+    detector: Detector,
+
+    // terminal state (spec section 8)
+    ejected: Option<EjectSnapshot>,
+}
+
+/// Frozen numbers at EJECT. Claims are computed from these.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EjectSnapshot {
+    pub t_e: u64,
+    pub reserve_e: U128,
+    pub supply_e: U128,
+    pub fund_e: U128,
+    pub w_e: U128,
+}
+
+/// Per-holder view for the web app ("your seat").
+#[near(serializers = [json])]
+#[derive(Clone, Debug, PartialEq)]
+pub struct HolderView {
+    pub balance: U128,
+    /// Net basis in yoctoNEAR as a decimal string (can be negative).
+    pub basis: String,
+    /// Weight accrued up to now (or up to EJECT), in weight units.
+    pub weight: U128,
+    /// Total weight of all holders at the same moment.
+    pub total_weight: U128,
+    pub claimed: bool,
+    /// Payout if EJECT happened now (before EJECT), or the actual claimable payout (after).
+    pub reserve_part: U128,
+    pub fund_part: U128,
 }
 
 /// Fee and output breakdown of a buy. Used by `buy` and `quote_buy`.
@@ -131,6 +178,13 @@ pub struct Status {
     pub reserve: U128,
     pub fund: U128,
     pub protocol_fees: U128,
+    pub day: u64,
+    pub window_buys: U128,
+    pub peak_window: U128,
+    pub alive_threshold: U128,
+    pub ejectable: bool,
+    pub total_weight: U128,
+    pub ejected: Option<EjectSnapshot>,
 }
 
 /// Rounds `amount * bps / BPS` up (fees always round in favor of the contract).
@@ -159,12 +213,20 @@ impl Coin {
         let me = env::current_account_id();
         let caller = env::predecessor_account_id();
         let is_parent = me.as_str().ends_with(&format!(".{}", caller.as_str()));
-        require!(is_parent || caller == me, "Only the factory (parent account) can initialize");
-        require!(!name.is_empty() && name.chars().count() <= 32, "name must be 1 to 32 characters");
+        require!(
+            is_parent || caller == me,
+            "Only the factory (parent account) can initialize"
+        );
+        require!(
+            !name.is_empty() && name.chars().count() <= 32,
+            "name must be 1 to 32 characters"
+        );
         require!(
             symbol.len() >= 2
                 && symbol.len() <= 10
-                && symbol.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+                && symbol
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
             "symbol must be 2 to 10 characters, lowercase a-z and 0-9"
         );
         if let Some(i) = &icon {
@@ -175,7 +237,8 @@ impl Coin {
             "day_length_sec must be between 10 and 86400"
         );
         let (fund_buy_bps, fund_sell_bps) = fee_preset.fund_bps();
-        Self {
+        let now = now_sec();
+        let mut this = Self {
             name,
             symbol,
             icon,
@@ -183,14 +246,20 @@ impl Coin {
             fund_buy_bps,
             fund_sell_bps,
             day_length_sec,
-            launch_ts: now_sec(),
+            launch_ts: now,
             protocol_account,
             factory: caller,
             token: FungibleToken::new(StorageKey::Token),
             reserve: 0,
             fund: 0,
             protocol_fees: 0,
-        }
+            holders: LookupMap::new(StorageKey::Holders),
+            ledger: Ledger::new(now),
+            detector: Detector::default(),
+            ejected: None,
+        };
+        this.include_holder_storage();
+        this
     }
 
     // ---------- trading ----------
@@ -199,6 +268,7 @@ impl Coin {
     /// Returns the amount of raw tokens minted.
     #[payable]
     pub fn buy(&mut self, min_tokens_out: Option<U128>) -> U128 {
+        self.assert_live();
         let buyer = env::predecessor_account_id();
         require!(
             self.token.accounts.contains_key(&buyer),
@@ -209,7 +279,10 @@ impl Coin {
         let tokens = q.tokens_out.0;
         require!(tokens > 0, "Buy too small for any tokens");
         if let Some(min) = min_tokens_out {
-            require!(tokens >= min.0, "Slippage: fewer tokens than min_tokens_out");
+            require!(
+                tokens >= min.0,
+                "Slippage: fewer tokens than min_tokens_out"
+            );
         }
 
         // effects
@@ -219,7 +292,21 @@ impl Coin {
         self.token.internal_deposit(&buyer, tokens);
         debug_assert_eq!(self.reserve, reserve_at(self.token.total_supply));
 
-        FtMint { owner_id: &buyer, amount: U128(tokens), memo: Some("ejecto buy") }.emit();
+        // accounting: basis += x, then record the buy for the alive detector
+        let now = now_sec();
+        let mut h = self.holder_or_default(&buyer);
+        self.ledger.touch(&mut h, now);
+        let nb = h.basis + amount as i128;
+        self.ledger.set_basis(&mut h, nb);
+        self.holders.insert(buyer.clone(), h);
+        self.detector.record_buy(self.day_at(now), amount);
+
+        FtMint {
+            owner_id: &buyer,
+            amount: U128(tokens),
+            memo: Some("ejecto buy"),
+        }
+        .emit();
         events::buy(&buyer, amount, &q);
         U128(tokens)
     }
@@ -227,6 +314,7 @@ impl Coin {
     /// Sells `amount` raw tokens back to the curve. Sends NEAR to the seller.
     /// Returns the NEAR sent (after the fund fee).
     pub fn sell(&mut self, amount: U128, min_near_out: Option<U128>) -> U128 {
+        self.assert_live();
         let seller = env::predecessor_account_id();
         let d = amount.0;
         require!(d > 0, "Amount must be positive");
@@ -235,7 +323,10 @@ impl Coin {
         let q = self.compute_sell(d);
         require!(q.near_out.0 > 0, "Sell too small");
         if let Some(min) = min_near_out {
-            require!(q.near_out.0 >= min.0, "Slippage: less NEAR than min_near_out");
+            require!(
+                q.near_out.0 >= min.0,
+                "Slippage: less NEAR than min_near_out"
+            );
         }
 
         // effects before the outgoing transfer
@@ -244,7 +335,23 @@ impl Coin {
         self.fund += q.fund_fee.0;
         debug_assert_eq!(self.reserve, reserve_at(self.token.total_supply));
 
-        FtBurn { owner_id: &seller, amount: U128(d), memo: Some("ejecto sell") }.emit();
+        // accounting: basis -= proceeds, or leave the ship on a full exit
+        let mut h = self.holder_or_default(&seller);
+        self.ledger.touch(&mut h, now_sec());
+        if balance == d {
+            self.ledger.leave_ship(&mut h);
+        } else {
+            let nb = h.basis - q.near_out.0 as i128;
+            self.ledger.set_basis(&mut h, nb);
+        }
+        self.holders.insert(seller.clone(), h);
+
+        FtBurn {
+            owner_id: &seller,
+            amount: U128(d),
+            memo: Some("ejecto sell"),
+        }
+        .emit();
         events::sell(&seller, d, &q);
         // Dropping a Promise schedules it, the binding only silences the must_use lint.
         let _ = Promise::new(seller).transfer(NearToken::from_yoctonear(q.near_out.0));
@@ -257,9 +364,124 @@ impl Coin {
         require!(amount > 0, "No protocol fees to withdraw");
         self.protocol_fees = 0;
         events::protocol_withdraw(&self.protocol_account, amount);
-        let _ = Promise::new(self.protocol_account.clone())
-            .transfer(NearToken::from_yoctonear(amount));
+        let _ =
+            Promise::new(self.protocol_account.clone()).transfer(NearToken::from_yoctonear(amount));
         U128(amount)
+    }
+
+    // ---------- EJECT and claim ----------
+
+    /// Ends the coin when the alive rule allows it (spec sections 7 and 8). Anyone can call.
+    pub fn eject(&mut self) -> EjectSnapshot {
+        require!(self.ejected.is_none(), "Already ejected");
+        let now = now_sec();
+        let day = self.day_at(now);
+        require!(
+            day >= detector::MIN_AGE_DAYS,
+            "Too young to eject: the coin needs 14 days"
+        );
+        require!(self.detector.ejectable(day), "The coin is still alive");
+        self.ledger.touch_global(now);
+        let supply = self.token.total_supply;
+        if supply == 0 && self.fund > 0 {
+            // Nobody is on board, so nobody can claim the fund. Route it to protocol fees.
+            self.protocol_fees += self.fund;
+            self.fund = 0;
+        }
+        let snap = EjectSnapshot {
+            t_e: now,
+            reserve_e: U128(self.reserve),
+            supply_e: U128(supply),
+            fund_e: U128(self.fund),
+            w_e: U128(self.ledger.w_total),
+        };
+        self.ejected = Some(snap.clone());
+        events::eject(&snap);
+        snap
+    }
+
+    /// Pays the caller's share after EJECT: reserve part by tokens plus fund part by weight.
+    /// The caller's tokens are burned. Returns the NEAR sent.
+    pub fn claim(&mut self) -> U128 {
+        let snap = self
+            .ejected
+            .clone()
+            .unwrap_or_else(|| env::panic_str("Not ejected yet"));
+        let account = env::predecessor_account_id();
+        let balance = self.token.ft_balance_of(account.clone()).0;
+        require!(balance > 0, "Nothing to claim");
+        let mut h = self.holder_or_default(&account);
+        require!(!h.claimed, "Already claimed");
+        let weight_final = Ledger::live_weight(&h, snap.t_e);
+        let (reserve_part, fund_part) = claim_parts(
+            snap.reserve_e.0,
+            snap.supply_e.0,
+            snap.fund_e.0,
+            snap.w_e.0,
+            balance,
+            weight_final,
+        );
+
+        // effects before the outgoing transfer
+        h.claimed = true;
+        h.weight = weight_final;
+        h.last_ts = h.last_ts.max(snap.t_e);
+        self.holders.insert(account.clone(), h);
+        self.token.internal_withdraw(&account, balance);
+        self.reserve = self
+            .reserve
+            .checked_sub(reserve_part)
+            .expect("claim exceeds reserve");
+        self.fund = self
+            .fund
+            .checked_sub(fund_part)
+            .expect("claim exceeds fund");
+        let payout = reserve_part + fund_part;
+
+        FtBurn {
+            owner_id: &account,
+            amount: U128(balance),
+            memo: Some("ejecto claim"),
+        }
+        .emit();
+        events::claim(&account, balance, reserve_part, fund_part);
+        if payout > 0 {
+            let _ = Promise::new(account).transfer(NearToken::from_yoctonear(payout));
+        }
+        U128(payout)
+    }
+
+    pub fn holder(&self, account_id: AccountId) -> HolderView {
+        let balance = self.token.ft_balance_of(account_id.clone()).0;
+        let h = self.holders.get(&account_id).cloned().unwrap_or_default();
+        let (t, reserve_e, supply_e, fund_e, w_total) = match &self.ejected {
+            Some(e) => (e.t_e, e.reserve_e.0, e.supply_e.0, e.fund_e.0, e.w_e.0),
+            None => {
+                let now = now_sec();
+                (
+                    now,
+                    self.reserve,
+                    self.token.total_supply,
+                    self.fund,
+                    self.ledger.live_total(now),
+                )
+            }
+        };
+        let weight = Ledger::live_weight(&h, t);
+        let (reserve_part, fund_part) = if h.claimed {
+            (0, 0)
+        } else {
+            claim_parts(reserve_e, supply_e, fund_e, w_total, balance, weight)
+        };
+        HolderView {
+            balance: U128(balance),
+            basis: h.basis.to_string(),
+            weight: U128(weight),
+            total_weight: U128(w_total),
+            claimed: h.claimed,
+            reserve_part: U128(reserve_part),
+            fund_part: U128(fund_part),
+        }
     }
 
     // ---------- views ----------
@@ -276,6 +498,7 @@ impl Coin {
     pub fn status(&self) -> Status {
         let now = now_sec();
         let supply = self.token.total_supply;
+        let day = self.day_at(now);
         Status {
             name: self.name.clone(),
             symbol: self.symbol.clone(),
@@ -295,10 +518,85 @@ impl Coin {
             reserve: U128(self.reserve),
             fund: U128(self.fund),
             protocol_fees: U128(self.protocol_fees),
+            day,
+            window_buys: U128(self.detector.window_buys(day)),
+            peak_window: U128(self.detector.peak_window),
+            alive_threshold: U128(self.detector.alive_threshold()),
+            ejectable: self.ejected.is_none() && self.detector.ejectable(day),
+            total_weight: U128(match &self.ejected {
+                Some(e) => e.w_e.0,
+                None => self.ledger.live_total(now),
+            }),
+            ejected: self.ejected.clone(),
         }
     }
 
     // ---------- internal ----------
+
+    fn assert_live(&self) {
+        require!(
+            self.ejected.is_none(),
+            "The coin was ejected: trading and transfers are closed"
+        );
+    }
+
+    fn day_at(&self, now: u64) -> u64 {
+        now.saturating_sub(self.launch_ts) / self.day_length_sec
+    }
+
+    fn holder_or_default(&self, account_id: &AccountId) -> Holder {
+        self.holders.get(account_id).cloned().unwrap_or_default()
+    }
+
+    /// Adds the size of one holder accounting entry to the NEP-145 per-account storage,
+    /// so `storage_deposit` charges for both the balance and the accounting entry.
+    fn include_holder_storage(&mut self) {
+        let before = env::storage_usage();
+        let probe: AccountId = "a".repeat(64).parse().unwrap();
+        self.holders.insert(
+            probe.clone(),
+            Holder {
+                basis: i128::MAX,
+                weight: u128::MAX,
+                last_ts: u64::MAX,
+                claimed: true,
+            },
+        );
+        self.holders.flush();
+        let used = env::storage_usage().saturating_sub(before);
+        self.holders.remove(&probe);
+        self.holders.flush();
+        self.token.account_storage_usage += used;
+    }
+
+    /// Moves basis with a token transfer (spec section 6). Weight never moves.
+    /// `sender_balance` is the sender's balance before the transfer.
+    fn move_basis(
+        &mut self,
+        sender: &AccountId,
+        receiver: &AccountId,
+        amount: u128,
+        sender_balance: u128,
+    ) {
+        require!(
+            sender != receiver,
+            "Sender and receiver should be different"
+        );
+        let now = now_sec();
+        let mut hs = self.holder_or_default(sender);
+        let mut hr = self.holder_or_default(receiver);
+        self.ledger.touch(&mut hs, now);
+        self.ledger.touch(&mut hr, now);
+        let moved = moved_basis(hs.basis, amount, sender_balance);
+        let (ns, nr) = (hs.basis - moved, hr.basis + moved);
+        self.ledger.set_basis(&mut hs, ns);
+        self.ledger.set_basis(&mut hr, nr);
+        if amount >= sender_balance {
+            self.ledger.leave_ship(&mut hs);
+        }
+        self.holders.insert(sender.clone(), hs);
+        self.holders.insert(receiver.clone(), hr);
+    }
 
     fn compute_buy(&self, amount: u128) -> BuyQuote {
         require!(amount >= MIN_BUY, "Minimum buy is 0.001 NEAR");
@@ -341,6 +639,14 @@ impl Coin {
 impl FungibleTokenCore for Coin {
     #[payable]
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>) {
+        self.assert_live();
+        let sender = env::predecessor_account_id();
+        let balance = self.token.ft_balance_of(sender.clone()).0;
+        require!(
+            amount.0 > 0 && amount.0 <= balance,
+            "Invalid transfer amount"
+        );
+        self.move_basis(&sender, &receiver_id, amount.0, balance);
         self.token.ft_transfer(receiver_id, amount, memo)
     }
 
@@ -352,6 +658,14 @@ impl FungibleTokenCore for Coin {
         memo: Option<String>,
         msg: String,
     ) -> PromiseOrValue<U128> {
+        self.assert_live();
+        let sender = env::predecessor_account_id();
+        let balance = self.token.ft_balance_of(sender.clone()).0;
+        require!(
+            amount.0 > 0 && amount.0 <= balance,
+            "Invalid transfer amount"
+        );
+        self.move_basis(&sender, &receiver_id, amount.0, balance);
         self.token.ft_transfer_call(receiver_id, amount, memo, msg)
     }
 
@@ -373,10 +687,18 @@ impl FungibleTokenResolver for Coin {
         receiver_id: AccountId,
         amount: U128,
     ) -> U128 {
-        let (used, burned) = self.token.internal_ft_resolve_transfer(&sender_id, receiver_id, amount);
-        // Tokens can only be "burned" here if the sender unregistered mid-flight. That cannot
-        // happen because force unregister is disabled, so the reserve invariant holds.
+        let receiver_before = self.token.ft_balance_of(receiver_id.clone()).0;
+        let (used, burned) =
+            self.token
+                .internal_ft_resolve_transfer(&sender_id, receiver_id.clone(), amount);
+        // Tokens can only be "burned" here if the sender unregistered mid-flight. Panicking
+        // reverts this callback, so the receiver keeps the tokens and the supply stays consistent.
         require!(burned == 0, "Unexpected burn in resolve");
+        let refund = amount.0 - used;
+        // A refund is a transfer back. After EJECT the accounting is frozen, only tokens move.
+        if refund > 0 && self.ejected.is_none() {
+            self.move_basis(&receiver_id, &sender_id, refund, receiver_before);
+        }
         used.into()
     }
 }
@@ -403,8 +725,17 @@ impl StorageManagement for Coin {
     /// tokens without releasing the matching reserve, so `force` is rejected.
     #[payable]
     fn storage_unregister(&mut self, force: Option<bool>) -> bool {
-        require!(!force.unwrap_or(false), "Forced unregister is disabled. Sell your tokens first.");
-        self.token.storage_unregister(Some(false))
+        require!(
+            !force.unwrap_or(false),
+            "Forced unregister is disabled. Sell your tokens first."
+        );
+        let account = env::predecessor_account_id();
+        let removed = self.token.storage_unregister(Some(false));
+        if removed {
+            // Zero balance means the holder already left the ship (basis and weight are 0).
+            self.holders.remove(&account);
+        }
+        removed
     }
 
     fn storage_balance_bounds(&self) -> StorageBalanceBounds {
