@@ -4,7 +4,6 @@ target/
 # Node
 node_modules/
 dist/
-web/.env
 
 # Simulation output (re-generate with: node sim/ejecto-sim.mjs sim/out)
 sim/out/
