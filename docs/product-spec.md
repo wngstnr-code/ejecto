@@ -67,6 +67,10 @@ Fixed at the factory level (same for every coin of this factory version):
 | `K` (slope) | 5e-16 NEAR per token per token (5e8 yoctoNEAR) |
 | Protocol fee | 0.5% of every buy |
 | Protocol account | Set in the factory config, copied into each coin at launch |
+| Supply cap | 10 billion tokens (reserve at the cap is about 25,000 NEAR) |
+| Minimum buy | 0.001 NEAR |
+
+Initialization: `new` may only be called by the parent account (the factory) or by the coin account itself (fallback deploy without a factory).
 
 ## 5. Bonding curve
 
@@ -81,6 +85,7 @@ Fixed at the factory level (same for every coin of this factory version):
 3. `cost = R(s + d) - R(s)`. The rounding dust `net - cost` goes to the Ejecto Fund.
 4. Mint `d` tokens to the buyer. `reserve += cost`. `fund += fund_fee + dust`. `protocol_fees += protocol_fee`.
 5. Optional `min_tokens_out` argument for slippage protection. Panic if `d < min_tokens_out`.
+   Also panic if `d == 0`, if `x` is below the minimum buy, if the buyer is not registered (NEP-145), or if the buy would hit the supply cap with leftover NEAR (the leftover would not be dust).
 6. Record `x` in today's buy bucket (section 7).
 7. Update the buyer's accounting: `b_i += x` (section 6).
 
@@ -100,7 +105,13 @@ Fixed at the factory level (same for every coin of this factory version):
 | **standard** (default) | 1.5% | 0.5% | 2.0% | 2.0% |
 | high | 3.0% | 0.5% | 3.5% | 5.0% |
 
-Rounding always favors the contract (tokens out and proceeds round down, fees round up).
+Rounding always favors the contract (tokens out and proceeds round down, fees round up). Normal rounding dust is a few yoctoNEAR.
+
+### Storage and unregistering
+
+- Holders register with NEP-145 `storage_deposit` before their first buy or receive.
+- `storage_unregister(force = true)` is rejected. A forced unregister would burn tokens without releasing the matching reserve and break invariant 1. Unregistering with a zero balance is allowed.
+- If an `ft_transfer_call` refund would burn tokens (sender gone), the resolve callback panics instead, so the receiver keeps the tokens and the supply stays consistent.
 
 ## 6. Holder accounting (net basis x time)
 
