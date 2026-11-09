@@ -13,16 +13,17 @@ Update this file at the end of every session and after every milestone. Newest e
 
 ## Next step (exact)
 
-1. Install `cargo-near` and `near-cli-rs` (commands in `build-and-deploy.md` section 1).
-2. Ask the user to create and fund the testnet accounts in `build-and-deploy.md` section 2, and to tell us the account names.
-3. Start M1: scaffold `contracts/coin`.
+1. Finish installing `cargo-near` and `near-cli-rs` (running).
+2. Wait for the user to fund `FUNDER_ACCOUNT` (in `.env`) with the faucet, about 30 NEAR.
+3. Write and run `scripts/setup-accounts` to create `ejecto.testnet` and its sub-accounts (`build-and-deploy.md` section 2).
+4. Start M1: scaffold `contracts/coin`.
 4. Before the deadline, ask the user to make the repo public (it is private now).
 
 ## Blockers and open questions
 
 | Question | Owner | Status |
 |---|---|---|
-| Testnet account names (factory, protocol, 3 demo holders) | user | open |
+| Funder account funded with the faucet | user | open |
 | When to make the GitHub repo public (must be public before the deadline) | user | open |
 | Wallet package for the web app (Wallet Selector or near-connect) | dev, check docs before M4 | open |
 
@@ -41,7 +42,8 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | What | Account | Notes |
 |---|---|---|
-| (none yet) | | |
+| Funder (implicit) | see `FUNDER_ACCOUNT` in `.env` | Keypair in the local keychain, waiting for faucet funds |
+| Master | `ejecto.testnet` | Not created yet |
 
 ## Repository
 
@@ -58,5 +60,6 @@ Update this file at the end of every session and after every milestone. Newest e
 - Ran the 60-day simulation (500 runs x 400 traders). Key results are in `research.md`.
 - Wrote the docs set. Moved the simulation to `sim/`, translated its labels to English, and added `scripts/check-dashes.mjs`.
 - Removed obsolete files: the Indonesian research docs (replaced by English docs) and the Segel proof of concept.
+- Generated the funder keypair and moved all config to a single root `.env` (template `.env.example`).
 - Initialized git and created the private GitHub repo `wngstnr-code/ejecto`. Initial work pushed as split commits.
 - Research PDFs in Indonesian are on the user's Desktop (`Ejecto-Riset-Mendalam.pdf`, `Segel-Riset-Mendalam.pdf`). They are outside the repo and are not part of the submission.
