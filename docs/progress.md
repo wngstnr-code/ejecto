@@ -13,7 +13,7 @@ Update this file at the end of every session and after every milestone. Newest e
 
 ## Next step (exact)
 
-1. Finish installing `cargo-near` and `near-cli-rs` (running).
+1. Done: `cargo-near` 0.23.0 and `near-cli-rs` 0.31.1 are installed.
 2. Wait for the user to fund `FUNDER_ACCOUNT` (in `.env`) with the faucet, about 30 NEAR.
 3. Write and run `scripts/setup-accounts` to create `ejecto.testnet` and its sub-accounts (`build-and-deploy.md` section 2).
 4. Start M1: scaffold `contracts/coin`.

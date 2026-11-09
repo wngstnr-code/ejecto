@@ -9,7 +9,7 @@ The deadline is **2026-11-14 23:59 UTC** (2026-11-15 06:59 WIB). Every milestone
 - [x] Research and idea selection (see `research.md`, `decisions.md`)
 - [x] 60-day simulation (`sim/ejecto-sim.mjs`)
 - [x] Docs
-- [ ] Install `cargo-near` and `near-cli-rs` (see `build-and-deploy.md`)
+- [x] Install `cargo-near` 0.23.0 and `near-cli-rs` 0.31.1
 - [x] Funder keypair generated, single root `.env` and `.env.example`
 - [ ] User: fund the funder account with the faucet (about 30 NEAR)
 - [ ] `scripts/setup-accounts`: create `ejecto.testnet` and its sub-accounts, distribute NEAR

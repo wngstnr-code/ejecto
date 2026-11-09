@@ -13,8 +13,8 @@ Installed on the dev machine (checked 2026-11-09):
 | Node.js | 24.1.0 | installed |
 | pnpm | 10.33.0 | installed |
 | git | 2.48.1 | installed |
-| cargo-near | 0.23.0 (latest on crates.io) | **not installed yet** |
-| near-cli-rs | 0.31.1 (latest on crates.io) | **not installed yet** |
+| cargo-near | 0.23.0 | installed |
+| near-cli-rs | 0.31.1 | installed |
 
 Latest library versions seen on 2026-11-09: `near-sdk` 5.30.1, `near-workspaces` 0.24.0, `near-api-js` 7.4.0, `@near-wallet-selector/core` 10.1.4, `vite` 8.3.7.
 
