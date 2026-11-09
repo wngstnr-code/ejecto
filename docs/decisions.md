@@ -18,3 +18,4 @@ Add a new entry whenever a decision changes the product, the architecture, or th
 | D-012 | 2026-11-09 | Static web app: Vite + React + TypeScript on GitHub Pages, RPC reads only. | No backend rule. Simple hosting that judges can open. |
 | D-013 | 2026-11-09 | Testnet only for the hackathon. | No audit, no legal review. Also the hackathon allows testnet-only entries for all tracks (rule Q-010). |
 | D-014 | 2026-11-09 | SOS rescue is a stretch goal, built only after M4. | Helps the Social track fit, but the core mechanic and a working demo matter more. |
+| D-015 | 2026-11-09 | Testnet accounts: master `ejecto.testnet` (created by the NEAR faucet service) with sub-accounts `factory`, `fees`, `ani`, `budi`, `cici`, `whale`. One root `.env` for all config, keys only in the local keychain. | near-faucet.io rejects accounts that do not exist yet. A single funded master keeps funding simple, and sub-accounts keep coin names short (`<symbol>.factory.ejecto.testnet`). |
