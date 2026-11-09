@@ -11,7 +11,7 @@ The deadline is **2026-11-14 23:59 UTC** (2026-11-15 06:59 WIB). Every milestone
 - [x] Docs
 - [ ] Install `cargo-near` and `near-cli-rs` (see `build-and-deploy.md`)
 - [ ] User: create and fund testnet accounts (factory, protocol, 3 demo holders)
-- [ ] User: `git init` and create the GitHub repo (public before the deadline)
+- [x] `git init` and private GitHub repo `wngstnr-code/ejecto` (make it public before the deadline)
 
 Done when: `cargo near --version` and `near --version` work, and the accounts exist.
 
