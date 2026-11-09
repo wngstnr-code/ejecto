@@ -99,6 +99,9 @@ Standard NEP-297 events for `ft_mint`, `ft_burn`, `ft_transfer`, plus Ejecto eve
 
 ### Gas and storage
 
+Measured in the sandbox (2026-11-09): `create_coin` 45.8 Tgas, `storage_deposit` + `buy` 4.5 Tgas, `sell` 3.2 Tgas, `ft_transfer` 2.6 Tgas, `eject` 1.9 Tgas, `claim` 3.1 Tgas, `set_coin_code` 29.3 Tgas.
+
+
 - Every method is O(1). The window sum loops over 14 buckets only.
 - Each holder entry is paid by NEP-145 storage deposit. The web app batches `storage_deposit` and `buy` as two function-call actions in one transaction when the user is not registered yet.
 
@@ -111,6 +114,9 @@ Standard NEP-297 events for `ft_mint`, `ft_burn`, `ft_transfer`, plus Ejecto eve
 | `create_coin(name, symbol, icon, fee_preset, day_length_sec)` | payable | Validates args, creates `<symbol>.<factory>`, transfers the storage deposit, deploys the coin wasm, calls `new`. Adds **no access key**, so the coin account is keyless. Registers the coin in the list after the callback succeeds, and refunds on failure. |
 | `get_coins(from_index, limit)` / `get_coin(symbol)` | view | Coin registry for the web app |
 
+- `set_coin_code` takes the raw wasm bytes as the call input (near-cli `file-args`), checks the `\0asm` magic, and stores the code in a `LazyOption` with its length and sha256 hash (shown by `get_config`, so anyone can compare it with a local build).
+- `launch_deposit = coin_code_len x storage_byte_cost + 0.3 NEAR`. For the 237 KB coin this is about 2.67 NEAR. The deposit pays the new coin's storage.
+- `create_coin` sends one batch to the new account: `create_account`, `transfer(deposit)`, `deploy_contract(code)`, `function_call(new)`. The batch is atomic, so a failed init reverts the account creation and the deposit returns to the factory. The callback `on_coin_created` registers the coin, or refunds the creator.
 - The factory keeps an owner during development so we can update the coin code. Coins already launched are never affected, because each coin is keyless and has no upgrade path.
 - Optimization to check later: NEAR global contracts can deploy coin code by reference and reduce the launch deposit. Use plain code deployment for the MVP.
 
@@ -158,6 +164,6 @@ The web app polls `status()` every few seconds. There is no websocket and no ind
 |---|---|---|
 | Unit | `cargo test` with near-sdk test utils | Curve math round trips, fees, rounding, accounting rules, alive detector, EJECT, claim sums, invariants |
 | Attack scenarios | `cargo test` | Late whale, wash trading, sybil, transfer games, buy and sell after EJECT |
-| Integration | `near-workspaces` (Rust, sandbox) | Factory launch, keyless check (no access keys), full lifecycle with a short day length |
-| Parity | Script | Same scenario through the sim math and the contract, compare results |
+| Integration | `near-workspaces` 0.24 (Rust, sandbox), `contracts/factory/tests/integration.rs` | Factory launch, keyless check, second init rejected, duplicate symbol rejected, buy, sell, transfer, EJECT after 14 demo days, claims match the view, protocol fees arrive, low deposit rejected. Prints gas per call. |
+| Parity | `cargo test` (coin) | Contract tokens, reserve and fund match the simulation formulas within 1e-9, and the fund split matches the simulation weighting |
 | Manual | Testnet and the web app | Demo flow from `hackathon.md` |
