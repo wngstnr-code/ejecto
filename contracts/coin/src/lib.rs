@@ -170,7 +170,6 @@ pub struct Status {
     pub demo_time: bool,
     pub launch_ts: u64,
     pub now_ts: u64,
-    pub age_days: u64,
     pub protocol_account: AccountId,
     pub factory: AccountId,
     pub supply: U128,
@@ -212,7 +211,9 @@ impl Coin {
     ) -> Self {
         let me = env::current_account_id();
         let caller = env::predecessor_account_id();
-        let is_parent = me.as_str().ends_with(&format!(".{}", caller.as_str()));
+        // The caller must be the direct parent (`seato.factory.x` -> `factory.x`), not any ancestor.
+        let is_parent =
+            me.as_str().split_once('.').map(|(_, parent)| parent) == Some(caller.as_str());
         require!(
             is_parent || caller == me,
             "Only the factory (parent account) can initialize"
@@ -338,9 +339,7 @@ impl Coin {
         // accounting: basis -= proceeds, or leave the ship on a full exit
         let mut h = self.holder_or_default(&seller);
         self.ledger.touch(&mut h, now_sec());
-        if balance == d {
-            self.ledger.leave_ship(&mut h);
-        } else {
+        if !self.ledger.shed(&mut h, d, balance) {
             let nb = h.basis - q.near_out.0 as i128;
             self.ledger.set_basis(&mut h, nb);
         }
@@ -382,7 +381,10 @@ impl Coin {
             day >= detector::MIN_AGE_DAYS,
             "Too young to eject: the coin needs 14 days"
         );
-        require!(self.detector.ejectable(day), "The coin is still alive");
+        require!(
+            self.detector.window_buys(day) < self.detector.alive_threshold(),
+            "The coin is still alive"
+        );
         self.ledger.touch_global(now);
         let supply = self.token.total_supply;
         if supply == 0 && self.fund > 0 {
@@ -413,9 +415,10 @@ impl Coin {
         let balance = self.token.ft_balance_of(account.clone()).0;
         require!(balance > 0, "Nothing to claim");
         let mut h = self.holder_or_default(&account);
-        require!(!h.claimed, "Already claimed");
         let weight_final = Ledger::live_weight(&h, snap.t_e);
-        let (reserve_part, fund_part) = claim_parts(
+        // The reserve part is paid for whatever balance the caller holds now, so tokens that a
+        // late ft_transfer_call refund brings back can be claimed too. The fund part is paid once.
+        let (reserve_part, mut fund_part) = claim_parts(
             snap.reserve_e.0,
             snap.supply_e.0,
             snap.fund_e.0,
@@ -423,6 +426,9 @@ impl Coin {
             balance,
             weight_final,
         );
+        if h.claimed {
+            fund_part = 0;
+        }
 
         // effects before the outgoing transfer
         h.claimed = true;
@@ -472,11 +478,11 @@ impl Coin {
             }
         };
         let weight = Ledger::live_weight(&h, t);
-        let (reserve_part, fund_part) = if h.claimed {
-            (0, 0)
-        } else {
-            claim_parts(reserve_e, supply_e, fund_e, w_total, balance, weight)
-        };
+        let (reserve_part, mut fund_part) =
+            claim_parts(reserve_e, supply_e, fund_e, w_total, balance, weight);
+        if h.claimed {
+            fund_part = 0;
+        }
         HolderView {
             balance: U128(balance),
             basis: h.basis.to_string(),
@@ -514,7 +520,6 @@ impl Coin {
             demo_time: self.day_length_sec < REAL_DAY,
             launch_ts: self.launch_ts,
             now_ts: now,
-            age_days: now.saturating_sub(self.launch_ts) / self.day_length_sec,
             protocol_account: self.protocol_account.clone(),
             factory: self.factory.clone(),
             supply: U128(supply),
@@ -573,9 +578,10 @@ impl Coin {
         self.token.account_storage_usage += used;
     }
 
-    /// Moves basis with a token transfer (spec section 6). Weight never moves.
-    /// `sender_balance` is the sender's balance before the transfer.
-    fn move_basis(
+    /// Accounting for a token transfer (spec section 6): the sender's positive basis moves
+    /// pro-rata to the receiver, the sender sheds the same fraction of weight, and the
+    /// receiver starts accruing from now. `sender_balance` is the sender's balance before.
+    fn transfer_accounting(
         &mut self,
         sender: &AccountId,
         receiver: &AccountId,
@@ -595,9 +601,7 @@ impl Coin {
         let (ns, nr) = (hs.basis - moved, hr.basis + moved);
         self.ledger.set_basis(&mut hs, ns);
         self.ledger.set_basis(&mut hr, nr);
-        if amount >= sender_balance {
-            self.ledger.leave_ship(&mut hs);
-        }
+        self.ledger.shed(&mut hs, amount, sender_balance);
         self.holders.insert(sender.clone(), hs);
         self.holders.insert(receiver.clone(), hr);
     }
@@ -650,7 +654,7 @@ impl FungibleTokenCore for Coin {
             amount.0 > 0 && amount.0 <= balance,
             "Invalid transfer amount"
         );
-        self.move_basis(&sender, &receiver_id, amount.0, balance);
+        self.transfer_accounting(&sender, &receiver_id, amount.0, balance);
         self.token.ft_transfer(receiver_id, amount, memo)
     }
 
@@ -663,13 +667,8 @@ impl FungibleTokenCore for Coin {
         msg: String,
     ) -> PromiseOrValue<U128> {
         self.assert_live();
-        let sender = env::predecessor_account_id();
-        let balance = self.token.ft_balance_of(sender.clone()).0;
-        require!(
-            amount.0 > 0 && amount.0 <= balance,
-            "Invalid transfer amount"
-        );
-        self.move_basis(&sender, &receiver_id, amount.0, balance);
+        // No accounting here: the tokens are in flight. `ft_resolve_transfer` books only the
+        // part the receiver kept, as a transfer from the sender's own basis.
         self.token.ft_transfer_call(receiver_id, amount, memo, msg)
     }
 
@@ -691,17 +690,18 @@ impl FungibleTokenResolver for Coin {
         receiver_id: AccountId,
         amount: U128,
     ) -> U128 {
-        let receiver_before = self.token.ft_balance_of(receiver_id.clone()).0;
         let (used, burned) =
             self.token
                 .internal_ft_resolve_transfer(&sender_id, receiver_id.clone(), amount);
         // Tokens can only be "burned" here if the sender unregistered mid-flight. Panicking
         // reverts this callback, so the receiver keeps the tokens and the supply stays consistent.
         require!(burned == 0, "Unexpected burn in resolve");
-        let refund = amount.0 - used;
-        // A refund is a transfer back. After EJECT the accounting is frozen, only tokens move.
-        if refund > 0 && self.ejected.is_none() {
-            self.move_basis(&receiver_id, &sender_id, refund, receiver_before);
+        // Book the used part as a plain transfer from the sender, as if it happened now.
+        // Only the sender's own basis and weight are touched, so a refund can never pull
+        // basis out of the receiver. After EJECT the accounting is frozen, only tokens move.
+        if used > 0 && self.ejected.is_none() {
+            let sender_after = self.token.ft_balance_of(sender_id.clone()).0;
+            self.transfer_accounting(&sender_id, &receiver_id, used, sender_after + used);
         }
         used.into()
     }
