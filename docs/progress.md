@@ -6,15 +6,16 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Item | Value |
 |---|---|
-| Phase | M0 done, M1 next |
-| Overall | Research, simulation, docs, repo and testnet accounts are done. No contract code yet. |
+| Phase | M1 done, M2 next |
+| Overall | Setup done. Coin contract core (token, curve, fees, fund) done with 34 unit tests. |
 | Deadline | 2026-11-14 23:59 UTC (2026-11-15 06:59 WIB) |
 | Days left | 5 (as of 2026-11-09) |
 
 ## Next step (exact)
 
-1. Start M1: scaffold `contracts/coin` (near-sdk 5.x) as described in `development-plan.md`.
-2. Ask the user to top up `ejecto.testnet` at near-faucet.io before M3 (deployments need more NEAR).
+1. Start M2 in `contracts/coin`: holder accounting (basis, weight, `S_pos`, `W`), transfer hooks (also in `ft_resolve_transfer`), 14-bucket alive detector, `eject`, `claim`, `holder` view, events.
+2. M2 must also raise `token.account_storage_usage` to cover the new per-holder accounting entry, so `storage_deposit` charges enough.
+3. Ask the user to top up `ejecto.testnet` at near-faucet.io before M3 (deployments need more NEAR).
 4. Before the deadline, ask the user to make the repo public (it is private now).
 
 ## Blockers and open questions
@@ -30,11 +31,30 @@ Update this file at the end of every session and after every milestone. Newest e
 | Milestone | Status |
 |---|---|
 | M0 Setup | done |
-| M1 Coin contract core | not started |
+| M1 Coin contract core | done |
 | M2 Accounting, detector, EJECT, claim | not started |
 | M3 Factory and testnet | not started |
 | M4 Web app | not started |
 | M5 Submission | not started |
+
+## Review notes
+
+### M1 deep review (2026-11-09)
+
+| Finding | Fix |
+|---|---|
+| A buy that hits the supply cap would send the leftover NEAR to the fund as "dust" | Now rejected with "Buy would exceed the supply cap". Test added. |
+| `isqrt` started Newton from `n`, up to ~250 U512 divisions for large inputs | Start from `2^ceil(bits/2)`. Test for huge values added. |
+| Forced `storage_unregister` would burn tokens and break `reserve == R(supply)` | Forced unregister rejected. Test added. |
+| `ft_transfer_call` refund could burn tokens if the sender left | Resolve panics instead, receiver keeps the tokens. Documented in the spec. |
+| A unit test (`init_twice`) only tested a helper, not real near-sdk behavior | Removed. Real check moves to the M3 integration test. |
+
+## Known issues
+
+| Severity | Issue | Plan |
+|---|---|---|
+| low | If the protocol account does not exist, `withdraw_protocol_fees` zeroes the counter and the failed transfer refunds the NEAR to the coin, where it is no longer tracked | The factory always sets a real account. Revisit after M3. |
+| low | Gas of `buy` and `sell` is not measured yet | Measure in the M3 integration test. |
 
 ## Testnet deployments
 
@@ -56,6 +76,8 @@ Update this file at the end of every session and after every milestone. Newest e
 
 ### 2026-11-09
 
+- M1 done: `contracts/` Cargo workspace, `ejecto-coin` crate (curve, token, fees, fund, protocol fees, quotes, status), 34 unit tests, clippy clean, wasm 211 KB via `cargo near build`.
+- Rewrote git history to remove all traces of the local assistant file, force pushed while the repo is private.
 - Picked the idea **Ejecto** after dropping Segel (DAO-signed releases). The reason: track crowding and fit (see `decisions.md` D-001).
 - Ran the 60-day simulation (500 runs x 400 traders). Key results are in `research.md`.
 - Wrote the docs set. Moved the simulation to `sim/`, translated its labels to English, and added `scripts/check-dashes.mjs`.
