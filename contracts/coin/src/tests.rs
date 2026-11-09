@@ -902,3 +902,132 @@ fn storage_includes_holder_entry_and_unregister_cleans_it() {
     assert!(c.storage_unregister(None));
     assert!(c.holders.get(&a).is_none());
 }
+
+// =====================================================================================
+// Parity with the simulation formulas (sim/ejecto-sim.mjs) and wash trading
+// =====================================================================================
+
+/// The simulation works in NEAR (f64) and millions of tokens:
+/// price(s) = 0.02 + 0.0005 * s, reserveAt(s) = 0.02 * s + 0.0005 / 2 * s^2,
+/// fund += 1.5% of buys (standard) and 2% of sells. The contract must match these
+/// formulas up to floating point and integer rounding.
+#[test]
+fn contract_matches_simulation_formulas() {
+    const P0_SIM: f64 = 0.02;
+    const K_SIM: f64 = 0.0005;
+    let reserve_sim = |s: f64| P0_SIM * s + K_SIM / 2.0 * s * s;
+    let tokens_sim = |s: f64, net: f64| {
+        let b = P0_SIM + K_SIM * s;
+        (-b + (b * b + 2.0 * K_SIM * net).sqrt()) / K_SIM
+    };
+    let to_millions = |raw: u128| raw as f64 / 1e24; // 1e18 raw per token, 1e6 tokens
+    let to_near = |y: u128| y as f64 / 1e24;
+    let close = |a: f64, b: f64| (a - b).abs() <= 1e-9 * a.abs().max(b.abs()).max(1e-12);
+
+    let mut c = setup(FeePreset::Standard);
+    let a = user("ani");
+    register(&mut c, &a);
+    let (mut s_sim, mut fund_sim, mut reserve_sim_acc) = (0.0f64, 0.0f64, 0.0f64);
+    for amount_near in [0.5f64, 2.0, 7.25, 13.0, 0.75, 40.0] {
+        let amount = (amount_near * 1e24) as u128;
+        let d = buy(&mut c, &a, amount);
+        let net = amount_near * (1.0 - 0.015 - 0.005);
+        let d_sim = tokens_sim(s_sim, net);
+        assert!(
+            close(to_millions(d), d_sim),
+            "tokens {} vs sim {}",
+            to_millions(d),
+            d_sim
+        );
+        s_sim += d_sim;
+        fund_sim += amount_near * 0.015;
+        reserve_sim_acc += net;
+        assert!(close(to_near(c.reserve), reserve_sim(s_sim)));
+        assert!(close(to_near(c.reserve), reserve_sim_acc));
+        assert!(
+            close(to_near(c.fund), fund_sim),
+            "fund {} vs sim {}",
+            to_near(c.fund),
+            fund_sim
+        );
+    }
+    // a sell: gross = R(s) - R(s - d), fund += 2% of gross
+    let bal = balance(&c, &a);
+    let d = bal / 3;
+    let out = sell(&mut c, &a, d);
+    let d_m = to_millions(d);
+    let gross_sim = reserve_sim(s_sim) - reserve_sim(s_sim - d_m);
+    assert!(
+        close(to_near(out), gross_sim * 0.98),
+        "sell {} vs sim {}",
+        to_near(out),
+        gross_sim * 0.98
+    );
+    fund_sim += gross_sim * 0.02;
+    assert!(close(to_near(c.fund), fund_sim));
+}
+
+/// Fund split by net basis x time must match the simulation's weighting.
+#[test]
+fn fund_split_matches_simulation_weighting() {
+    let mut c = setup_demo(FeePreset::Standard);
+    let users = crew();
+    for u in &users {
+        register(&mut c, u);
+    }
+    // (who, day, NEAR in)
+    let plan: [(usize, u64, f64); 4] = [(0, 0, 10.0), (1, 2, 4.0), (2, 5, 6.0), (0, 6, 2.0)];
+    for (i, day, near) in plan {
+        buy_at(&mut c, &users[i], (near * 1e24) as u128, day);
+    }
+    let eject_day = 20;
+    eject_at(&mut c, eject_day);
+    // simulation weighting: basis_i * (t_e - t_buy), summed per holder, in NEAR x days
+    let mut w = [0.0f64; 4];
+    for (i, day, near) in plan {
+        w[i] += near * (eject_day - day) as f64;
+    }
+    let total: f64 = w.iter().sum();
+    let fund_e = u128_of_snap(&c);
+    for (i, u) in users.iter().enumerate().take(3) {
+        let got = c.holder(u.clone()).fund_part.0 as f64;
+        let want = fund_e * w[i] / total;
+        assert!(
+            (got - want).abs() <= want * 1e-9 + 2.0,
+            "holder {i}: {got} vs {want}"
+        );
+    }
+}
+
+fn u128_of_snap(c: &Coin) -> f64 {
+    c.ejected.as_ref().unwrap().fund_e.0 as f64
+}
+
+#[test]
+fn wash_trading_mostly_feeds_the_fund() {
+    let mut c = setup_demo(FeePreset::Standard);
+    let (ani, washer) = (user("ani"), user("whale"));
+    register(&mut c, &ani);
+    register(&mut c, &washer);
+    buy_at(&mut c, &ani, 10 * NEAR, 0);
+    let fund0 = c.fund;
+    let (mut spent, mut got) = (0u128, 0u128);
+    for day in 1..30 {
+        let d = buy_at(&mut c, &washer, 3 * NEAR, day);
+        spent += 3 * NEAR;
+        got += sell_at(&mut c, &washer, d, day);
+    }
+    let cost = spent - got;
+    let fund_growth = c.fund - fund0;
+    let share = fund_growth * 100 / cost;
+    // standard preset: 1.5% + 2% of ~4% round-trip cost goes to the fund, 0.5% to protocol
+    assert!(
+        share >= 85,
+        "only {share}% of the wash cost reached the fund"
+    );
+    assert_eq!(
+        h(&c, &washer).weight,
+        0,
+        "the washer never stays, so never earns weight"
+    );
+}
