@@ -104,41 +104,74 @@ cd contracts/coin && cargo test
 cd contracts/factory && cargo test        # includes near-workspaces sandbox tests
 ```
 
-### Deploy the factory to testnet
+### Deploy the factory to testnet (done 2026-11-09)
 
-cargo-near and near-cli-rs change their syntax between versions. Run `cargo near deploy --help` and `near --help` to confirm before using these templates.
+These exact commands were used with near-cli-rs 0.31.1 (run from `contracts/`):
 
 ```bash
-# deploy and initialize
-cd contracts/factory
-cargo near deploy build-non-reproducible-wasm <factory>.testnet \
-  with-init-call new json-args '{"owner":"<owner>.testnet","protocol_account":"<protocol>.testnet"}' \
-  prepaid-gas '100.0 Tgas' attached-deposit '0 NEAR' \
-  network-config testnet sign-with-keychain send
+# the factory needs about 4.1 NEAR of storage (its own code plus the stored coin code)
+near tokens ejecto.testnet send-near factory.ejecto.testnet '4 NEAR' \
+  network-config testnet sign-with-legacy-keychain send
 
-# upload the coin code (owner only)
-near contract call-function as-transaction <factory>.testnet set_coin_code \
-  file-args ../coin/target/near/ejecto_coin.wasm \
-  prepaid-gas '300.0 Tgas' attached-deposit '0 NEAR' \
-  sign-as <owner>.testnet network-config testnet sign-with-keychain send
+near contract deploy factory.ejecto.testnet \
+  use-file target/near/ejecto_factory/ejecto_factory.wasm \
+  with-init-call new json-args '{"owner":"ejecto.testnet","protocol_account":"fees.ejecto.testnet"}' \
+  prepaid-gas '30 Tgas' attached-deposit '0 NEAR' \
+  network-config testnet sign-with-legacy-keychain send
+
+# upload the coin code (owner only, raw wasm as input)
+near contract call-function as-transaction factory.ejecto.testnet set_coin_code \
+  file-args target/near/ejecto_coin/ejecto_coin.wasm \
+  prepaid-gas '100 Tgas' attached-deposit '0 NEAR' \
+  sign-as ejecto.testnet network-config testnet sign-with-legacy-keychain send
+
+# check: coin_code_hash must equal `shasum -a 256 target/near/ejecto_coin/ejecto_coin.wasm`
+near contract call-function as-read-only factory.ejecto.testnet get_config \
+  json-args '{}' network-config testnet now
 ```
 
-### Launch a demo coin from the CLI
+### Launch a coin from the CLI
 
 ```bash
-near contract call-function as-transaction <factory>.testnet create_coin \
+# attach at least launch_deposit (about 2.67 NEAR for the current coin code)
+near contract call-function as-transaction factory.ejecto.testnet create_coin \
   json-args '{"name":"Seato","symbol":"seato","fee_preset":"standard","day_length_sec":10}' \
-  prepaid-gas '300.0 Tgas' attached-deposit '<launch deposit> NEAR' \
-  sign-as <creator>.testnet network-config testnet sign-with-keychain send
+  prepaid-gas '200 Tgas' attached-deposit '2.68 NEAR' \
+  sign-as ejecto.testnet network-config testnet sign-with-legacy-keychain send
 ```
 
-Verify the coin is keyless:
+Verify the coin is keyless (expected: 0 keys):
 
 ```bash
-near account list-keys seato.<factory>.testnet network-config testnet now
+near account list-keys seato.factory.ejecto.testnet network-config testnet now
 ```
 
-The expected result is an empty key list.
+### Trade from the CLI
+
+```bash
+C=seato.factory.ejecto.testnet
+# once per account: register (amount from storage_balance_bounds.min, about 0.00275 NEAR)
+near contract call-function as-transaction $C storage_deposit json-args '{}' \
+  prepaid-gas '30 Tgas' attached-deposit '2750000000000000000000 yoctoNEAR' \
+  sign-as ani.ejecto.testnet network-config testnet sign-with-legacy-keychain send
+near contract call-function as-transaction $C buy json-args '{}' \
+  prepaid-gas '50 Tgas' attached-deposit '1 NEAR' \
+  sign-as ani.ejecto.testnet network-config testnet sign-with-legacy-keychain send
+# after EJECT
+near contract call-function as-transaction $C claim json-args '{}' \
+  prepaid-gas '50 Tgas' attached-deposit '0 NEAR' \
+  sign-as ani.ejecto.testnet network-config testnet sign-with-legacy-keychain send
+```
+
+### Integration tests (sandbox)
+
+```bash
+cd contracts/coin && cargo near build non-reproducible-wasm
+cd ../factory && cargo near build non-reproducible-wasm
+cargo test --test integration -- --nocapture --test-threads=1
+```
+
+The first run downloads the NEAR sandbox binary. Gas per call is printed.
 
 ## 4. Web app
 
