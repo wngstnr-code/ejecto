@@ -334,3 +334,34 @@ async fn launch_with_low_deposit_fails() -> anyhow::Result<()> {
     assert_eq!(coins.as_array().unwrap().len(), 0);
     Ok(())
 }
+
+#[tokio::test]
+async fn excess_launch_deposit_comes_back() -> anyhow::Result<()> {
+    let env = setup().await?;
+    let ani = user(&env, "ani", 20).await?;
+    let min = u128_of(&env.factory.view("launch_deposit").await?.json::<Value>()?);
+    let before = ani.view_account().await?.balance.as_yoctonear();
+    let out = ani
+        .call(env.factory.id(), "create_coin")
+        .args_json(json!({"name": "Moon", "symbol": "moon", "fee_preset": "standard", "day_length_sec": 10}))
+        .deposit(NearToken::from_yoctonear(min + NearToken::from_near(5).as_yoctonear()))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(out.is_success(), "launch failed: {out:?}");
+    // gas refunds for unused prepaid gas land a few blocks after the final outcome
+    env.worker.fast_forward(5).await?;
+    let spent = before - ani.view_account().await?.balance.as_yoctonear();
+    let gas_budget = NearToken::from_millinear(50).as_yoctonear();
+    assert!(
+        spent >= min && spent < min + gas_budget,
+        "spent {spent}, expected about {min}"
+    );
+    let coin: AccountId = format!("moon.{}", env.factory.id()).parse()?;
+    let coin_balance = env.worker.view_account(&coin).await?.balance.as_yoctonear();
+    assert!(
+        coin_balance <= min,
+        "the coin must hold at most the minimum deposit"
+    );
+    Ok(())
+}
