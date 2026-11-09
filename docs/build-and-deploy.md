@@ -32,17 +32,28 @@ cargo near --version
 near --version
 ```
 
-## 2. Accounts (created by the user)
+## 2. Accounts and the single env file
 
-| Account | Purpose |
-|---|---|
-| `<factory>.testnet` | Factory contract. Coins become `<symbol>.<factory>.testnet`. |
-| `<protocol>.testnet` | Receives protocol fees |
-| 3 demo holder accounts | Demo buyers (Ani, Budi, Cici) |
+Config lives in **one file**: `.env` at the repo root (gitignored). `.env.example` is the committed template. It holds account names and network settings only. Private keys live only in the local NEAR keychain (`~/.near-credentials/testnet/<account>.json`, file mode 600).
 
-Fund them with testnet NEAR from the faucet (near-cli or near-faucet.io). Keys stay in `~/.near-credentials`. Never copy keys into the repo.
+Accounts are prepared by script. The only manual step is funding the funder with the faucet.
 
-Write the chosen account names into `progress.md` (names only, never keys).
+| Account | Purpose | Created how |
+|---|---|---|
+| `FUNDER_ACCOUNT` (implicit, 64 hex chars) | Pays for everything | Keypair generated locally. Exists on-chain once the user funds it. |
+| `ejecto.testnet` (`MASTER_ACCOUNT`, `OWNER_ACCOUNT`) | Parent of all named accounts, factory owner | Funder calls the `testnet` registrar `create_account` |
+| `factory.ejecto.testnet` | Factory contract. Coins become `<symbol>.factory.ejecto.testnet`. | Sub-account of the master |
+| `fees.ejecto.testnet` | Receives protocol fees | Sub-account of the master |
+| `ani`, `budi`, `cici`, `whale` `.ejecto.testnet` | Demo holders and the attack demo | Sub-accounts of the master |
+
+Funding target: about 30 testnet NEAR on the funder (minimum 15). The faucet can be used more than once. Rough budget: factory storage for the coin code (about 3 NEAR), each coin launch (about 3 NEAR), demo buys (about 5 NEAR per demo account).
+
+Steps:
+
+1. Done: the funder keypair is generated and saved in the keychain. Its account id is in `.env`.
+2. The user funds `FUNDER_ACCOUNT` with the testnet faucet (for example https://near-faucet.io).
+3. Run `scripts/setup-accounts` (written in M0) to create the master and sub-accounts and distribute NEAR.
+4. Record the result in `progress.md` (names only, never keys).
 
 ## 3. Contracts
 
@@ -101,14 +112,16 @@ The expected result is an empty key list.
 ## 4. Web app
 
 ```bash
+cp .env.example .env        # once, at the repo root (the only env file)
 cd web
-cp .env.example .env        # set VITE_NETWORK=testnet and VITE_FACTORY_ID
 pnpm install
 pnpm dev                    # local dev server
 pnpm build                  # static build in web/dist
 ```
 
 Hosting: GitHub Pages from `web/dist` (GitHub Actions workflow or the `gh-pages` branch). Set the Vite `base` option to the repo name.
+
+`web/vite.config.ts` must set `envDir: '..'` so Vite reads the root `.env`. Only variables that start with `VITE_` reach the browser. Never put anything secret in a `VITE_` variable.
 
 ## 5. Simulation
 

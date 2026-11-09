@@ -115,7 +115,7 @@ Standard NEP-297 events for `ft_mint`, `ft_burn`, `ft_transfer`, plus Ejecto eve
 - Vite + React + TypeScript. Built as static files, hosted on GitHub Pages.
 - Wallet connection: NEAR Wallet Selector (`@near-wallet-selector/*`). Check the current recommended package in docs.near.org before starting M4. `@hot-labs/near-connect` is the alternative.
 - RPC reads: `near-api-js` (v7) view calls to the public testnet RPC.
-- Config through `web/.env` (no secrets): `VITE_NETWORK=testnet`, `VITE_FACTORY_ID=<factory account>`.
+- Config comes from the single root `.env` (Vite `envDir: '..'`). Only `VITE_` variables reach the browser: `VITE_NETWORK`, `VITE_RPC_URL`, `VITE_FACTORY_ID`. No secrets.
 
 Pages:
 
