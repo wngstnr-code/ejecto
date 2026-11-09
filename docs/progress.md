@@ -6,15 +6,15 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Item | Value |
 |---|---|
-| Phase | M1 done, M2 next |
-| Overall | Setup done. Coin contract core (token, curve, fees, fund) done with 34 unit tests. |
+| Phase | M2 done (parity check moved to M3), M3 next |
+| Overall | Coin contract feature complete for the MVP: token, curve, fees, fund, accounting, detector, EJECT, claim. 60 unit tests, wasm 237 KB. |
 | Deadline | 2026-11-14 23:59 UTC (2026-11-15 06:59 WIB) |
 | Days left | 5 (as of 2026-11-09) |
 
 ## Next step (exact)
 
-1. Start M2 in `contracts/coin`: holder accounting (basis, weight, `S_pos`, `W`), transfer hooks (also in `ft_resolve_transfer`), 14-bucket alive detector, `eject`, `claim`, `holder` view, events.
-2. M2 must also raise `token.account_storage_usage` to cover the new per-holder accounting entry, so `storage_deposit` charges enough.
+1. Start M3: `contracts/factory` (keyless `create_coin`, registry views, refunds), then a `near-workspaces` integration test (launch, keyless check, init twice rejected, full lifecycle with a short day length, gas measurement).
+2. M3 also: parity check sim vs contract on one fixed scenario, and a contract-level wash trading test.
 3. Ask the user to top up `ejecto.testnet` at near-faucet.io before M3 (deployments need more NEAR).
 4. Before the deadline, ask the user to make the repo public (it is private now).
 
@@ -32,7 +32,7 @@ Update this file at the end of every session and after every milestone. Newest e
 |---|---|
 | M0 Setup | done |
 | M1 Coin contract core | done |
-| M2 Accounting, detector, EJECT, claim | not started |
+| M2 Accounting, detector, EJECT, claim | done (parity check moved to M3) |
 | M3 Factory and testnet | not started |
 | M4 Web app | not started |
 | M5 Submission | not started |
@@ -49,12 +49,22 @@ Update this file at the end of every session and after every milestone. Newest e
 | `ft_transfer_call` refund could burn tokens if the sender left | Resolve panics instead, receiver keeps the tokens. Documented in the spec. |
 | A unit test (`init_twice`) only tested a helper, not real near-sdk behavior | Removed. Real check moves to the M3 integration test. |
 
+### M2 deep review (2026-11-09)
+
+| Finding | Fix |
+|---|---|
+| `moved_basis` used `saturating_mul` on basis x amount (about 10^25 x 10^26), which overflowed u128 and silently moved almost no basis on transfers | Now computed in 512 bits. Test with realistic magnitudes added. |
+| Unit tests that create two coins shared mocked storage, so the second coin read the first coin's holders (also a latent issue in the M1 fee preset test) | Such scenarios now run in a fresh thread (`fresh` helper) |
+| Late whale and sybil attacks | Contract tests confirm: whale loses at least 20%, sybil split changes nothing |
+| Anyone can keep a coin alive by buying at least the threshold every 14 days | By design: those buys pay fees into the fund for the holders, and holders can still sell any time |
+
 ## Known issues
 
 | Severity | Issue | Plan |
 |---|---|---|
 | low | If the protocol account does not exist, `withdraw_protocol_fees` zeroes the counter and the failed transfer refunds the NEAR to the coin, where it is no longer tracked | The factory always sets a real account. Revisit after M3. |
-| low | Gas of `buy` and `sell` is not measured yet | Measure in the M3 integration test. |
+| low | Gas of `buy`, `sell`, `eject` and `claim` is not measured yet | Measure in the M3 integration test. |
+| low | If an `ft_transfer_call` refund lands after the sender already claimed, those refunded tokens cannot be claimed (their share stays in the contract) | Very unlikely (needs EJECT and a claim between the call and its callback). Accept for the MVP. |
 
 ## Testnet deployments
 
@@ -76,6 +86,7 @@ Update this file at the end of every session and after every milestone. Newest e
 
 ### 2026-11-09
 
+- M2 done: holder accounting, transfer and refund hooks, alive detector, EJECT, claim, `holder` view, events. 60 unit tests. Found and fixed a u128 overflow in `moved_basis` and a test isolation problem.
 - M1 done: `contracts/` Cargo workspace, `ejecto-coin` crate (curve, token, fees, fund, protocol fees, quotes, status), 34 unit tests, clippy clean, wasm 211 KB via `cargo near build`.
 - Rewrote git history to remove all traces of the local assistant file, force pushed while the repo is private.
 - Picked the idea **Ejecto** after dropping Segel (DAO-signed releases). The reason: track crowding and fit (see `decisions.md` D-001).
