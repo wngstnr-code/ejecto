@@ -157,7 +157,7 @@ mod tests {
     /// Weight of 1 NEAR held for 1 day, in weight units.
     const NEAR_DAY: u128 = (NEAR as u128 / WEIGHT_UNIT) * DAY as u128;
 
-    /// The worked example from docs/research.md section 6 (Ani, Budi, Cici).
+    /// The worked example from docs/research.md section 7 (Ani, Budi, Cici).
     #[test]
     fn worked_example_ani_budi_cici() {
         let mut l = Ledger::new(0);
