@@ -72,7 +72,7 @@ Total $250,000, fixed in USD, paid in NEAR to the account given in the form. Pai
 ## 7. Demo script (about 3 minutes)
 
 1. **Hook (20 s).** "Two thirds of memecoins die within a day. When they die, the most loyal holders lose the most. We gave every memecoin an ejection seat."
-2. **Launch (20 s).** Launch `$SEATO` on testnet with demo time (1 day = 10 seconds). Show in the explorer that the coin account has no access keys.
+2. **Launch (20 s).** Launch a fresh demo coin on testnet with demo time (1 day = 10 seconds). `seato` is already used by the verification run, so pick a new symbol. Show in the explorer that the coin account has no access keys.
 3. **Hype (30 s).** Three wallets buy (Ani, Budi, Cici). The Ejecto Fund grows. Show each holder's seat and weight.
 4. **Crash (30 s).** Buying stops. The engine meter drops to red. The EJECT button lights up.
 5. **Wow moment (40 s).** Press EJECT. All three holders claim, and their NEAR balances go up. Show: "Without Ejecto, the last seller in the exit race gets almost nothing. With Ejecto, every holder gets a fair share of the reserve plus a fund share for loyalty." Be honest that late buyers can still lose some money (see `research.md` section 6).
