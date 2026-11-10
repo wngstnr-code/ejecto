@@ -13,6 +13,7 @@ const COLUMNS: Array<{ title: string; links: FooterLink[] }> = [
     links: [
       { label: "Launch a coin", href: "/launch/" },
       { label: "Explore coins", href: "/coins/" },
+      { label: "My seats", href: "/seats/" },
       { label: "How it works", href: "/#how" },
     ],
   },

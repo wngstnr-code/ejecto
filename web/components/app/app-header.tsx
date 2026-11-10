@@ -11,6 +11,7 @@ import { errorText, useWallet } from "@/lib/wallet";
 const NAV = [
   { href: "/coins/", label: "Coins" },
   { href: "/launch/", label: "Launch" },
+  { href: "/seats/", label: "My seats" },
 ];
 
 export function AppHeader() {
