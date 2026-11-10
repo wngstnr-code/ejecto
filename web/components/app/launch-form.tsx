@@ -358,6 +358,16 @@ function Launched({ coinId, name, symbol, icon }: { coinId: string; name: string
 /** Resize to a small square and re-encode until the data URL fits the contract's 2 KB limit. */
 async function shrinkIcon(file: File): Promise<string> {
   if (!file.type.startsWith("image/")) throw new Error("Pick an image file.");
+  // A small SVG stays vector (sharp at every size) when it already fits.
+  if (file.type === "image/svg+xml" && file.size <= MAX_ICON_BYTES) {
+    const url = await new Promise<string>((ok, fail) => {
+      const r = new FileReader();
+      r.onload = () => ok(String(r.result));
+      r.onerror = () => fail(new Error("Could not read the file."));
+      r.readAsDataURL(file);
+    });
+    if (url.length <= MAX_ICON_BYTES) return url;
+  }
   const bitmap = await createImageBitmap(file);
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
