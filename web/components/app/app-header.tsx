@@ -38,13 +38,21 @@ export function AppHeader() {
         </nav>
         <WalletButton />
       </div>
-      {/* small screens: nav under the bar */}
-      <nav className="flex gap-6 border-t border-line px-4 py-2 md:hidden">
-        {NAV.map((n) => (
-          <Link key={n.href} href={n.href} className="label text-muted">
-            {n.label}
-          </Link>
-        ))}
+      {/* small screens: the nav spans the full width under the bar, one equal tab per page */}
+      <nav className="grid grid-cols-3 border-t border-line md:hidden">
+        {NAV.map((n) => {
+          const active = path?.startsWith(n.href.replace(/\/$/, ""));
+          return (
+            <Link
+              key={n.href}
+              href={n.href}
+              className={`label relative py-3 text-center transition-colors ${active ? "text-hazard" : "text-muted"}`}
+            >
+              {n.label}
+              {active && <span className="absolute inset-x-0 bottom-0 h-0.5 bg-hazard" aria-hidden />}
+            </Link>
+          );
+        })}
       </nav>
     </header>
   );
@@ -100,7 +108,9 @@ function WalletButton() {
             W
           </span>
         )}
-        {shortAccount(accountId, 20)}
+        {/* phones get a shorter name so the pill fits next to the logo */}
+        <span className="sm:hidden">{shortAccount(accountId.split(".")[0], 12)}</span>
+        <span className="hidden sm:inline">{shortAccount(accountId, 20)}</span>
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-xl border border-line bg-panel">
