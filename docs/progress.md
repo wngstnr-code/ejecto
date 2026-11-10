@@ -26,7 +26,7 @@ Update this file at the end of every session and after every milestone. Newest e
 | More NEAR if M3 or M4 needs it (near-faucet.io still errors, use another faucet-service helper account with the user's OK) | user | open |
 | When to make the GitHub repo public (must be public before the deadline) | user | open |
 | Wallet package for the web app (Wallet Selector or near-connect) | dev, check docs before the app pages | open |
-| Source and license of the pilot GLB (needed for the README credits) | user | open |
+| Source and license of both pilot GLBs, `ejecto-pilot.glb` and `ejecto-pilot-wave.glb` (needed for the README credits) | user | open |
 
 ## Milestone checklist
 
@@ -95,7 +95,8 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 | low | The factory keeps a full-access key and an owner during the hackathon (D-017) | Launched coins are unaffected. Lock or hand over before any mainnet use. |
 | medium | Peak inflation griefing: a big buy followed by a sell raises `peak_window`, so 14 days later a still-active coin can fall below 5% of the fake peak and be ejected | Costly (about 4% of the fake peak, most of it paid into the fund) and nobody can steal anything, since holders get a fair pro-rata exit. Possible later fix: let the peak decay over time. |
 | low | Landing not yet checked on phone widths. The 3D layer has narrow-screen poses but no real-device test | Check after the app pages, before recording the demo. |
-| low | `web/public/mascot/ejecto-pilot.glb` is 2.4 MB, most of it one PNG texture | Fine for the demo. Could convert the texture to WebP to cut it about in half. |
+| low | `web/public/mascot/ejecto-pilot.glb` and `ejecto-pilot-wave.glb` are 2.4 MB each, most of it one PNG texture | Fine for the demo. Could convert the textures to WebP to cut them about in half. |
+| low | The waving model has no rig, so the wave is a vertex shader on one fused mesh. The glove touches the helmet in the source pose, so the arm keeps a small outward lean | Looks clean at the greeting size. A rigged model would allow a real wave. |
 | low | If a sender's `ft_transfer_call` is still in flight at EJECT and the receiver keeps the tokens, the sender keeps the matching weight without the tokens, so that small fund share stays unclaimed | Needs a transfer call to cross the EJECT moment. Accept for the MVP. |
 
 ## Testnet deployments
@@ -126,6 +127,9 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 - Added the 3D pilot layer (D-024): scroll choreography, ejection up and left, parachute rigging, zig-zag drifts with banking and a pendulum roll, drag to spin, leg swing and head shake in a vertex shader.
 - `sim/ejecto-sim.mjs` now also writes `example-series.json` (14-day buys, alive line, per-coin loss totals). Results unchanged.
 - Checked every section in the browser at desktop width. Typecheck, lint and the dash check pass.
+- Logo: helmet mark chosen from generated concepts, used for the header, favicon, apple icon and OG image (static files in `web/public/brand`).
+- Loading screen: real load progress bar in the center, then the 3D waving pilot (`ejecto-pilot-wave.glb`) pops up and says hi above the screen, turns once while gliding into the hero, and swaps to the main model at the back view. Extra front light during the intro. The hand wave stays clear of the visor.
+- Fixed: the pilot spun wildly after returning to a hidden tab (frame step now capped at 1/30 s).
 
 ### 2026-11-09
 
