@@ -56,7 +56,7 @@ export function EngineMeter({ status, phase }: { status: CoinStatus; phase: Phas
           <div className="relative h-8 overflow-hidden bg-panel-2">
             <div
               className={`bar-stripes h-full transition-[width] duration-700 ease-out ${FILL[phase]} ${phase === "ejectable" ? "animate-pulse" : ""}`}
-              style={{ width: pct(windowBuys) }}
+              style={{ width: pct(windowBuys), minWidth: windowBuys > 0 ? 4 : 0 }}
             />
           </div>
           <Marker at={pct(line)} label="Alive line" tone="text-eject" lineClass="bg-eject" />
