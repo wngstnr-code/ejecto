@@ -7,7 +7,8 @@ import { formatCompact, formatNear, formatPct, unitsToTokens, yoctoToNear } from
 import { getCoins, getHolder, getMetadata, getStatus, type CoinInfo, type CoinStatus, type HolderView } from "@/lib/near";
 import { call, errorText, useWallet } from "@/lib/wallet";
 import { TxNote, type Tx } from "./tx-note";
-import { Amount, CoinIcon, PhaseBadge } from "./ui";
+import { coinLink, parachuteText, xIntent } from "@/lib/share";
+import { Amount, CoinIcon, PhaseBadge, ShareButton } from "./ui";
 
 type Seat = { info: CoinInfo; status: CoinStatus; holder: HolderView; icon: string | null; phase: Phase };
 
@@ -21,6 +22,9 @@ const icons = new Map<string, string | null>();
 export function SeatsView() {
   const { ready, accountId, connect } = useWallet();
   const [seats, setSeats] = useState<Seat[] | null>(null);
+  // Amounts claimed in this visit, for the share text (after a claim the holder view reads 0).
+  const [paid, setPaid] = useState<Record<string, number>>({});
+  const onPaid = useCallback((coinId: string, near: number) => setPaid((p) => ({ ...p, [coinId]: near })), []);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -123,7 +127,7 @@ export function SeatsView() {
               <SectionTitle n="01" title="Ready to claim" note="These coins were ejected. Your share is waiting." />
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 {toClaim.map((s) => (
-                  <ClaimCard key={s.info.account_id} seat={s} amount={payout(s.holder)} onDone={load} />
+                  <ClaimCard key={s.info.account_id} seat={s} amount={payout(s.holder)} onDone={load} onPaid={onPaid} />
                 ))}
               </div>
             </section>
@@ -160,15 +164,19 @@ export function SeatsView() {
               <SectionTitle n={toClaim.length ? "03" : "02"} title="Landed" note="Seats you already claimed." />
               <div className="mt-6 flex flex-wrap gap-3">
                 {landed.map((s) => (
-                  <Link
-                    key={s.info.account_id}
-                    href={`/coin/?id=${s.info.account_id}`}
-                    className="label flex items-center gap-3 rounded-full border border-line py-2 pl-2 pr-4 text-muted transition-colors hover:border-hazard hover:text-bone"
-                  >
-                    <CoinIcon icon={s.icon} symbol={s.info.symbol} className="h-7 w-7" />
-                    {s.info.name}
-                    <span className="text-hud">Claimed</span>
-                  </Link>
+                  <span key={s.info.account_id} className="flex items-center gap-2">
+                    <Link
+                      href={`/coin/?id=${s.info.account_id}`}
+                      className="label flex items-center gap-3 rounded-full border border-line py-2 pl-2 pr-4 text-muted transition-colors hover:border-hazard hover:text-bone"
+                    >
+                      <CoinIcon icon={s.icon} symbol={s.info.symbol} className="h-7 w-7" />
+                      {s.info.name}
+                      <span className="text-hud">Claimed</span>
+                    </Link>
+                    <ShareButton href={xIntent(parachuteText(s.info.symbol, paid[s.info.account_id] ?? null), coinLink(s.info.account_id))} className="py-3">
+                      Share
+                    </ShareButton>
+                  </span>
                 ))}
               </div>
             </section>
@@ -230,7 +238,7 @@ function SeatRow({ seat, amount }: { seat: Seat; amount: number }) {
   );
 }
 
-function ClaimCard({ seat, amount, onDone }: { seat: Seat; amount: number; onDone: () => void }) {
+function ClaimCard({ seat, amount, onDone, onPaid }: { seat: Seat; amount: number; onDone: () => void; onPaid: (coinId: string, near: number) => void }) {
   const { send } = useWallet();
   const [tx, setTx] = useState<Tx | null>(null);
   const busy = tx?.state === "pending";
@@ -240,6 +248,7 @@ function ClaimCard({ seat, amount, onDone }: { seat: Seat; amount: number; onDon
     setTx({ state: "pending", text: "Confirm in your wallet..." });
     try {
       const res = await send(info.account_id, [call("claim", {}, GAS.claim)]);
+      onPaid(info.account_id, amount);
       setTx({ state: "done", text: "Claimed. Safe landing.", hash: res.hash });
       onDone();
     } catch (e) {

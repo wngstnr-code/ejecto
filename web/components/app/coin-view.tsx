@@ -117,7 +117,13 @@ export function CoinView({ id }: { id: string | null }) {
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
             {phase === "ejected" ? (
-              <ClaimPanel coinId={id} holder={holder} onDone={refresh} />
+              <ClaimPanel
+                coinId={id}
+                symbol={status.symbol}
+                holder={holder}
+                onDone={refresh}
+                claimedNear={chain.history?.log.find((e) => e.kind === "claim" && e.account === accountId)?.near ?? null}
+              />
             ) : phase === "ejectable" ? (
               <>
                 <EjectPanel coinId={id} onEjected={onEjected} />

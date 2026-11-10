@@ -6,7 +6,8 @@ import { formatCompact, formatNear, formatPct, unitsToTokens, yoctoToNear } from
 import type { CoinStatus, HolderView } from "@/lib/near";
 import { call, errorText, useWallet } from "@/lib/wallet";
 import { TxNote, type Tx } from "./tx-note";
-import { Amount, EjectHandle } from "./ui";
+import { coinLink, parachuteText, seatText, xIntent } from "@/lib/share";
+import { Amount, EjectHandle, ShareButton } from "./ui";
 
 /** "Your seat": what the connected holder has, and what they would get if the seat fired now. */
 export function SeatPanel({ status, holder }: { status: CoinStatus; holder: HolderView | null }) {
@@ -53,6 +54,9 @@ export function SeatPanel({ status, holder }: { status: CoinStatus; holder: Hold
           <div className="label mt-2 text-muted">
             {formatNear(reservePart, 4)} reserve + <span className="text-hazard">{formatNear(fundPart, 4)} fund</span>
           </div>
+          <ShareButton className="mt-4 w-full" href={xIntent(seatText(status.symbol, reservePart + fundPart), coinLink(`${status.symbol}.${status.factory}`))}>
+            Share my seat
+          </ShareButton>
         </div>
       )}
       {!ejected && balance === 0 && <p className="label mt-5 leading-relaxed text-muted">No seat yet. Buy any amount to strap in.</p>}
@@ -105,15 +109,32 @@ export function EjectPanel({ coinId, onEjected }: { coinId: string; onEjected: (
 }
 
 /** After EJECT: the holder's parachute and the claim button. */
-export function ClaimPanel({ coinId, holder, onDone }: { coinId: string; holder: HolderView | null; onDone: () => void }) {
+export function ClaimPanel({
+  coinId,
+  symbol,
+  holder,
+  onDone,
+  claimedNear = null,
+}: {
+  coinId: string;
+  symbol: string;
+  holder: HolderView | null;
+  onDone: () => void;
+  /** What this wallet's claim paid, from the on-chain log (for an earlier claim). */
+  claimedNear?: number | null;
+}) {
   const { accountId, connect, send } = useWallet();
   const [tx, setTx] = useState<Tx | null>(null);
+  // What this claim paid, kept for the share text (the holder view reads 0 once the claim is done).
+  const [paid, setPaid] = useState<number | null>(null);
   const busy = tx?.state === "pending";
 
   const claim = async () => {
     setTx({ state: "pending", text: "Confirm in your wallet..." });
     try {
+      const amount = holder ? yoctoToNear(holder.reserve_part) + yoctoToNear(holder.fund_part) : null;
       const res = await send(coinId, [call("claim", {}, GAS.claim)]);
+      setPaid(amount);
       setTx({ state: "done", text: "Claimed. Safe landing.", hash: res.hash });
       onDone();
     } catch (e) {
@@ -161,7 +182,12 @@ export function ClaimPanel({ coinId, holder, onDone }: { coinId: string; holder:
             </button>
           </>
         ) : holder?.claimed ? (
-          <p className="label mt-5 leading-relaxed text-hud">Claimed. You landed safely.</p>
+          <>
+            <p className="label mt-5 leading-relaxed text-hud">Claimed. You landed safely.</p>
+            <ShareButton className="mt-5 w-full" href={xIntent(parachuteText(symbol, paid ?? claimedNear), coinLink(coinId))}>
+              Share my parachute
+            </ShareButton>
+          </>
         ) : (
           <p className="label mt-5 leading-relaxed text-muted">This wallet had no seat on this coin when it was ejected.</p>
         )}
