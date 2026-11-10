@@ -124,7 +124,10 @@ function Pilot() {
   // Mouse drag state for spinning the pilot.
   const drag = useRef({ dragging: false, lastX: 0, lastY: 0, rotY: 0, rotX: 0, vel: 0, idle: 0 });
 
-  useFrame((state, delta) => {
+  useFrame((state, rawDelta) => {
+    // Cap the frame step. After the tab was hidden, rawDelta can be seconds long, which would blow up
+    // the pendulum spring and the drag inertia and make the pilot spin wildly on return.
+    const delta = Math.min(rawDelta, 1 / 30);
     const g = group.current;
     if (!g) return;
     const t = state.clock.elapsedTime;
