@@ -1,6 +1,6 @@
 # Ejecto
 
-[![CI](https://github.com/wngstnr-code/ejecto/actions/workflows/ci.yml/badge.svg)](https://github.com/wngstnr-code/ejecto/actions/workflows/ci.yml) ![tests](https://img.shields.io/badge/tests-71%20coin%20%C2%B7%2015%20factory%20%C2%B7%203%20sandbox-2ea44f) ![source](https://img.shields.io/badge/source-verified%20on%20NearBlocks-2ea44f) ![license](https://img.shields.io/badge/license-MIT-blue)
+[![CI](https://github.com/wngstnr-code/ejecto/actions/workflows/ci.yml/badge.svg)](https://github.com/wngstnr-code/ejecto/actions/workflows/ci.yml) [![chain check](https://github.com/wngstnr-code/ejecto/actions/workflows/chain.yml/badge.svg)](https://github.com/wngstnr-code/ejecto/actions/workflows/chain.yml) ![tests](https://img.shields.io/badge/tests-71%20coin%20%C2%B7%2015%20factory%20%C2%B7%203%20sandbox-2ea44f) ![source](https://img.shields.io/badge/source-verified%20on%20NearBlocks-2ea44f) ![license](https://img.shields.io/badge/license-MIT-blue)
 
 **Every memecoin needs an ejecto seato.**
 
@@ -50,7 +50,7 @@ Late buyers can still lose some money: early buyers got more tokens per NEAR, so
 
 | Criterion | Where it is answered |
 |---|---|
-| Technical implementation | All of the mechanic is in the coin contract: bonding curve [`curve.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/curve.rs), loyalty weights (net NEAR at risk times time) [`accounting.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/accounting.rs), the 14-day alive detector [`detector.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/detector.rs), and [`eject`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/lib.rs#L376) / [`claim`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/lib.rs#L409) in `lib.rs`. 71 coin unit tests, 15 factory unit tests and 3 sandbox tests with the real wasm ([Run it locally](#run-it-locally)). Reproducible build, source verified on NearBlocks. |
+| Technical implementation | All of the mechanic is in the coin contract: bonding curve [`curve.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/curve.rs), loyalty weights (net NEAR at risk times time) [`accounting.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/accounting.rs), the 14-day alive detector [`detector.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/detector.rs), and [`eject`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/lib.rs#L376) / [`claim`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/lib.rs#L409) in `lib.rs`. 71 coin unit tests, 15 factory unit tests and 3 sandbox tests with the real wasm ([Run it locally](#run-it-locally)). Reproducible build, source verified on NearBlocks. `node scripts/verify-chain.mjs` re-checks the live deployment with no keys. |
 | Design | A static app with five pages (landing, Coins, Coin, Launch, My seats), phone ready. The coin page shows the engine (14-day buys against the alive line), the price history rebuilt from chain, the curve, the eject record and an on-chain log of every action. |
 | Impact | The loyal holders are the ones who lose the most when a memecoin dies. In the 500-coin simulation Ejecto takes the share of traders wiped out from 4.37% to 0% and cuts losses per coin by 10.8% ([Simulation](#simulation)). The recorded testnet run shows the same on real transactions ([The demo run, on chain](#the-demo-run-on-chain)). |
 | Originality | The ending is the feature: one EJECT moment where everybody exits together, plus a fund that pays loyalty. See [How Ejecto differs](#how-ejecto-differs). |
@@ -85,7 +85,22 @@ With buys under 1 NEAR in total, the coin is already under the alive line at day
 
 ## Verify without a wallet
 
-Install [near-cli-rs](https://github.com/near/near-cli-rs), then:
+One command, Node 22+ only (no dependencies, no keys, public RPC):
+
+```bash
+node scripts/verify-chain.mjs
+# see, for the factory and for every coin it launched:
+#   ok    0 access keys
+#   ok    deployed code is the verified code  (4069f17ff98b)
+#   ok    reserve equals R(supply) exactly            (coins still trading)
+#   ok    claims paid out no more than the frozen reserve + fund   (ejected coins)
+#   ...
+# All checks passed.
+```
+
+It checks spec invariants 1, 2, 4 and 5 from outside the contract: no keys, the verified code hash, the reserve on the exact integer curve, the balance covering reserve, fund, protocol fees and storage, and claims within the frozen pot. The [chain check](.github/workflows/chain.yml) workflow runs it against testnet every 6 hours.
+
+Or check single facts with [near-cli-rs](https://github.com/near/near-cli-rs):
 
 ```bash
 # the coin account has no access keys
@@ -177,13 +192,19 @@ Needs Docker. Details in `docs/build-and-deploy.md`.
 node sim/ejecto-sim.mjs sim/out
 ```
 
-An agent-based model (zero dependencies): 500 coins, 400 traders each, 60 days, the same traders and random draws with and without Ejecto. It writes `sim/out/ejecto-results.json` and two SVG charts. Results (standard fees):
+An agent-based model (zero dependencies): 500 coins, 400 traders each, 60 days, the same traders and random draws with and without Ejecto. It writes `sim/out/ejecto-results.json` and the series behind the charts below (`node sim/readme-charts.mjs sim/out docs/img` redraws them). Results (standard fees):
 
 | | Exit race | Ejecto |
 |---|---|---|
 | Traders wiped out (lose 90% or more) | 4.37% | **0%** |
 | Losses per coin (NEAR) | 387.96 | **346.12** (-10.8%) |
 | Late whale buying 1 to 500 NEAR right before EJECT | | **always loses 30.8% to 48.5%** |
+
+![Exit race against Ejecto: traders wiped out 4.37% to 0%, losses per coin 388 to 346 NEAR](docs/img/sim-outcomes.svg)
+
+![The example coin: 14-day buys fall under the alive line on day 34, EJECT, 164 holders claim 167 NEAR reserve plus 41 NEAR fund](docs/img/sim-engine.svg)
+
+![A late whale buying 1 to 500 NEAR right before EJECT loses 30.8% to 48.5% under Ejecto's weighting](docs/img/sim-whale.svg)
 
 The simulation is a model, not market data.
 
