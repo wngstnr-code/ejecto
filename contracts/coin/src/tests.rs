@@ -1251,3 +1251,391 @@ fn init_by_grandparent_panics() {
         protocol(),
     );
 }
+
+// =====================================================================================
+// Mayday (spec section 10): crowd rescue with fund co-invest, escrow, refunds
+// =====================================================================================
+
+fn mayday_at(c: &mut Coin, a: &AccountId, target: u128, deposit: u128, day: u64) -> Mayday {
+    ctx(a, deposit, at_day(day));
+    c.mayday(U128(target))
+}
+
+fn pledge_at(c: &mut Coin, a: &AccountId, amount: u128, day: u64) -> u128 {
+    ctx(a, amount, at_day(day));
+    c.pledge().0
+}
+
+fn collect_at(c: &mut Coin, a: &AccountId, day: u64) -> u128 {
+    ctx(a, 0, at_day(day));
+    c.collect().0
+}
+
+fn withdraw_at(c: &mut Coin, a: &AccountId, day: u64) -> u128 {
+    ctx(a, 0, at_day(day));
+    c.withdraw_pledge().0
+}
+
+fn status_at(c: &Coin, day: u64) -> Status {
+    ctx(&user("anyone"), 0, at_day(day));
+    c.status()
+}
+
+/// Holders plus the escrow (the coin account), for the weight and basis invariants.
+fn with_escrow(users: &[AccountId]) -> Vec<AccountId> {
+    let mut v = users.to_vec();
+    v.push(coin_id());
+    v
+}
+
+/// A coin bought only on day 0 (0.6 NEAR, under the 1 NEAR alive line), so it is ejectable from day 14.
+fn dying_coin() -> (Coin, Vec<AccountId>) {
+    let mut c = setup_demo(FeePreset::Standard);
+    let users = crew();
+    for u in &users {
+        register(&mut c, u);
+    }
+    buy_at(&mut c, &users[0], NEAR * 3 / 10, 0);
+    buy_at(&mut c, &users[1], NEAR * 2 / 10, 0);
+    buy_at(&mut c, &users[2], NEAR / 10, 0);
+    (c, users)
+}
+
+#[test]
+#[should_panic(expected = "only be called when the coin could be ejected")]
+fn mayday_needs_an_ejectable_coin() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], NEAR, NEAR, 10); // too young
+}
+
+#[test]
+#[should_panic(expected = "Target must be between the alive line and 3 times it")]
+fn mayday_target_below_the_line_panics() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], NEAR / 2, NEAR / 2, 15);
+}
+
+#[test]
+#[should_panic(expected = "Target must be between the alive line and 3 times it")]
+fn mayday_target_above_three_lines_panics() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 4 * NEAR, NEAR, 15);
+}
+
+#[test]
+#[should_panic(expected = "The opener pledges at least 10% of the target")]
+fn mayday_opener_must_stake_ten_percent() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 10, 15);
+}
+
+#[test]
+#[should_panic(expected = "A Mayday is already open")]
+fn only_one_mayday_at_a_time() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 5, 15);
+    mayday_at(&mut c, &users[1], 2 * NEAR, NEAR / 5, 15);
+}
+
+#[test]
+#[should_panic(expected = "A Mayday is open: EJECT waits until it ends")]
+fn eject_is_blocked_while_a_mayday_is_open() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 5, 15);
+    assert!(!status_at(&c, 16).ejectable, "EJECT is blocked during the Mayday");
+    eject_at(&mut c, 16);
+}
+
+#[test]
+fn eject_after_the_deadline_closes_the_mayday_as_failed() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 5, 15);
+    // deadline is day 18; on day 18 EJECT closes the failed Mayday and ends the coin
+    assert!(status_at(&c, 18).ejectable);
+    eject_at(&mut c, 18);
+    let r = c.get_round(1).unwrap();
+    assert!(!r.rescued);
+    assert_eq!(r.pledges_left.0, NEAR / 5);
+    // the pledge still comes back after EJECT
+    assert_eq!(withdraw_at(&mut c, &users[0], 19), NEAR / 5);
+}
+
+#[test]
+fn rescue_fills_all_pledges_at_one_price_with_fund_coinvest() {
+    let (mut c, users) = dying_coin();
+    let fund_before = c.fund;
+    let supply_before = c.token.total_supply;
+    mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 2, 15);
+    pledge_at(&mut c, &users[3], NEAR, 16);
+    let s_before_last = c.token.total_supply;
+    assert_eq!(s_before_last, supply_before, "pledges are not buys");
+    pledge_at(&mut c, &users[1], NEAR / 2, 16); // reaches 2 NEAR: the rescue executes now
+    let st = status_at(&c, 16);
+    assert!(st.mayday.is_none());
+    assert_eq!(st.rescues, 1);
+    assert!(!st.ejectable, "the rescue counts as a buy, the coin is alive again");
+    assert_eq!(st.pledges_held.0, 0);
+    let r = c.get_round(1).unwrap();
+    assert!(r.rescued);
+    assert_eq!(r.pledges_left.0, 2 * NEAR);
+    assert_eq!(balance(&c, &coin_id()), r.tokens_left.0, "the escrow holds the rescue tokens");
+    assert_curve_invariant(&c);
+    // co-invest = min(25% of 2 NEAR, half the fund); here the fund is small, so half of it
+    let fee = fee_up(2 * NEAR, 150);
+    let coinvest = (2 * NEAR / 4).min((fund_before + fee) / 2);
+    assert!(c.fund <= fund_before + fee - coinvest + 1_000_000, "fund paid the co-invest");
+    assert!(c.fund + coinvest >= fund_before + fee, "only dust may be added on top");
+    // one price: each pledger's tokens are proportional to the pledge
+    let t3 = collect_at(&mut c, &users[3], 17);
+    let t0 = collect_at(&mut c, &users[0], 17);
+    let t1 = collect_at(&mut c, &users[1], 17);
+    assert!(t3.abs_diff(t0 * 2) <= 2 && t0.abs_diff(t1) <= 2, "same price for everyone");
+    assert_eq!(balance(&c, &coin_id()), 0, "the escrow is empty after everyone collected");
+    assert_eq!(c.get_round(1).unwrap().pledges_left.0, 0);
+}
+
+#[test]
+fn collect_moves_tokens_basis_and_the_weight_earned_since_the_rescue() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[3], NEAR, NEAR, 15); // solo rescue in the opening call
+    assert_eq!(status_at(&c, 15).rescues, 1);
+    let all = with_escrow(&users);
+    assert_s_pos(&c, &all);
+    assert_weights(&c, &all, at_day(15) / SEC);
+    let before = h(&c, &users[3]);
+    assert_eq!(before.pledge, NEAR);
+    // five days later the pledger collects: basis = pledge, weight = pledge x 5 days
+    let tokens = collect_at(&mut c, &users[3], 20);
+    let after = h(&c, &users[3]);
+    assert!(tokens > 0 && balance(&c, &users[3]) == tokens);
+    assert_eq!(after.basis, before.basis + NEAR as i128);
+    let expected = accounting::scaled(NEAR as i128) * (5 * DEMO_DAY) as u128;
+    assert!(after.weight.abs_diff(expected) <= 1, "weight {} vs {expected}", after.weight);
+    assert_eq!(after.pledge, 0);
+    assert_s_pos(&c, &all);
+    assert_weights(&c, &all, at_day(20) / SEC);
+}
+
+#[test]
+fn any_action_collects_first() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[3], NEAR, NEAR, 15);
+    let view = {
+        ctx(&users[3], 0, at_day(16));
+        c.holder(users[3].clone())
+    };
+    assert_eq!(view.pledge_state, "rescued");
+    assert!(view.collectable.0 > 0);
+    // a sell of the collectable tokens works without calling collect first
+    let got = sell_at(&mut c, &users[3], view.collectable.0 / 2, 16);
+    assert!(got > 0);
+    assert_eq!(h(&c, &users[3]).pledge, 0, "the sell collected first");
+}
+
+#[test]
+fn failed_mayday_refunds_every_pledge_in_full_and_starts_a_cooldown() {
+    let (mut c, users) = dying_coin();
+    let mut total_in = c.reserve + c.fund + c.protocol_fees;
+    mayday_at(&mut c, &users[0], 3 * NEAR, NEAR / 2, 15);
+    pledge_at(&mut c, &users[1], NEAR / 3, 16);
+    total_in += NEAR / 2 + NEAR / 3;
+    assert_eq!(
+        total_in,
+        c.reserve + c.fund + c.protocol_fees + c.pledges_held,
+        "pledges are held, not spent"
+    );
+    // deadline day 18 passes below the target
+    let st = status_at(&c, 19);
+    assert!(st.ejectable, "a Mayday past its deadline does not block EJECT");
+    assert_eq!(withdraw_at(&mut c, &users[0], 19), NEAR / 2);
+    assert_eq!(withdraw_at(&mut c, &users[1], 19), NEAR / 3);
+    assert_eq!(c.pledges_held, 0);
+    // cooldown: 7 days after the deadline (day 18 + 7 = day 25)
+    let st = status_at(&c, 24);
+    assert!(!st.can_mayday, "no new Mayday during the cooldown");
+    assert!(st.ejectable, "EJECT stays possible during the cooldown");
+    assert!(status_at(&c, 25).can_mayday);
+    mayday_at(&mut c, &users[2], NEAR, NEAR / 10, 25);
+}
+
+#[test]
+#[should_panic(expected = "Cooldown: a failed Mayday ended less than 7 days ago")]
+fn no_new_mayday_during_the_cooldown() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 3 * NEAR, NEAR / 2, 15);
+    mayday_at(&mut c, &users[2], NEAR, NEAR, 24);
+}
+
+#[test]
+#[should_panic(expected = "Pledges are locked until the Mayday ends")]
+fn pledges_are_locked_while_the_mayday_is_open() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 3 * NEAR, NEAR / 2, 15);
+    withdraw_at(&mut c, &users[0], 16);
+}
+
+#[test]
+#[should_panic(expected = "This Mayday succeeded: collect your tokens instead")]
+fn a_filled_pledge_cannot_be_withdrawn() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[3], NEAR, NEAR, 15);
+    // collect happens automatically in most calls, but not in withdraw_pledge
+    withdraw_at(&mut c, &users[3], 16);
+}
+
+#[test]
+#[should_panic(expected = "Withdraw your pledge from the earlier Mayday first")]
+fn an_old_failed_pledge_must_be_withdrawn_before_pledging_again() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 3 * NEAR, NEAR / 2, 15);
+    // fails on day 18, cooldown until day 25
+    mayday_at(&mut c, &users[1], NEAR, NEAR / 10, 25);
+    pledge_at(&mut c, &users[0], NEAR / 10, 25);
+}
+
+#[test]
+#[should_panic(expected = "Collect or withdraw your Mayday pledge first")]
+fn storage_unregister_is_refused_with_an_open_pledge() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[3], 3 * NEAR, NEAR / 2, 15);
+    ctx(&users[3], 1, at_day(16));
+    c.storage_unregister(None);
+}
+
+#[test]
+#[should_panic(expected = "cannot receive tokens")]
+fn tokens_cannot_be_sent_to_the_coin_account() {
+    let (mut c, users) = dying_coin();
+    let b = balance(&c, &users[0]);
+    transfer_at(&mut c, &users[0], &coin_id(), b / 2, 1);
+}
+
+#[test]
+fn after_eject_a_claim_collects_first_and_claims_stay_within_the_pot() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 2, 15);
+    pledge_at(&mut c, &users[3], 3 * NEAR / 2, 15); // rescue on day 15
+    // nobody buys again: the rescue leaves the window after 14 days and the coin is ejectable
+    assert!(!status_at(&c, 28).ejectable);
+    assert!(status_at(&c, 29).ejectable);
+    let snap = eject_at(&mut c, 29);
+    let mut claimed = 0;
+    for u in &users {
+        ctx(u, 0, at_day(30));
+        let v = c.holder(u.clone());
+        if v.balance.0 + v.collectable.0 > 0 {
+            let got = claim_at(&mut c, u, 30);
+            assert_eq!(got, v.reserve_part.0 + v.fund_part.0, "the view predicts the claim");
+            claimed += got;
+        }
+    }
+    assert!(claimed <= snap.reserve_e.0 + snap.fund_e.0);
+    assert_eq!(balance(&c, &coin_id()), 0, "every rescue token was collected and burned");
+    assert!(c.reserve + c.fund < 1_000_000, "only dust stays: {}", c.reserve + c.fund);
+}
+
+#[test]
+fn rescue_and_dump_loses_money() {
+    let (mut c, users) = dying_coin();
+    let attacker = &users[3];
+    mayday_at(&mut c, attacker, 3 * NEAR, 3 * NEAR, 15); // solo rescue to grab the co-invest
+    let tokens = collect_at(&mut c, attacker, 15);
+    let back = sell_at(&mut c, attacker, tokens, 15);
+    assert!(back < 3 * NEAR, "rescue and dump must lose: got back {back}");
+}
+
+#[test]
+fn random_ops_with_maydays_keep_all_invariants() {
+    // Only valid calls are made (preconditions are read from the views first), so every call
+    // succeeds and every invariant is checked after every step.
+    let (mut c, users) = dying_coin();
+    let all = with_escrow(&users);
+    let mut seed: u64 = 7;
+    let mut rnd = move || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        seed >> 33
+    };
+    let mut total_in = c.reserve + c.fund + c.protocol_fees;
+    let mut total_out = 0u128;
+    let (mut rescues, mut fails, mut collects, mut withdrawals) = (0, 0, 0, 0);
+    let mut day = 14;
+    for _ in 0..600 {
+        day += rnd() % 2;
+        if day > 160 {
+            break;
+        }
+        let u = &users[(rnd() % 4) as usize];
+        let st = status_at(&c, day);
+        ctx(u, 0, at_day(day));
+        let v = c.holder(u.clone());
+        let free_to_pledge = v.pledge_state == "none" || v.pledge_state == "rescued";
+        match rnd() % 6 {
+            0 if st.can_mayday && free_to_pledge => {
+                let line = st.alive_threshold.0;
+                let target = line + line * (rnd() as u128 % 3) / 2;
+                let dep = target / 10 + (rnd() as u128 % 6) * NEAR / 10;
+                mayday_at(&mut c, u, target, dep, day);
+                total_in += dep;
+            }
+            1 if st
+                .mayday
+                .as_ref()
+                .is_some_and(|m| at_day(day) / SEC < m.deadline_ts && (v.pledge_round == m.round || free_to_pledge)) =>
+            {
+                let a = NEAR / 10 + (rnd() as u128 % 8) * NEAR / 5;
+                pledge_at(&mut c, u, a, day);
+                total_in += a;
+            }
+            2 => {
+                let a = MIN_BUY + (rnd() as u128 % 4) * NEAR / 10;
+                buy_at(&mut c, u, a, day);
+                total_in += a;
+            }
+            3 if v.pledge_state == "failed" && !st.mayday.as_ref().is_some_and(|m| m.round == v.pledge_round && at_day(day) / SEC < m.deadline_ts) => {
+                total_out += withdraw_at(&mut c, u, day);
+                withdrawals += 1;
+            }
+            4 if v.pledge_state == "rescued" => {
+                collect_at(&mut c, u, day);
+            }
+            5 => {
+                let b = v.balance.0 + v.collectable.0;
+                ctx(u, 0, at_day(day));
+                if b > 3 && c.quote_sell(U128(b / 3)).near_out.0 > 0 {
+                    total_out += sell_at(&mut c, u, b / 3, day);
+                }
+            }
+            _ => {}
+        }
+        // an explicit collect, or an automatic one inside a buy, sell or pledge
+        if v.pledge_state == "rescued" && h(&c, u).pledge == 0 {
+            collects += 1;
+        }
+        let after = status_at(&c, day);
+        if after.rescues > st.rescues {
+            rescues += 1;
+        }
+        if after.mayday.is_none() && st.mayday.is_some() && after.rescues == st.rescues {
+            fails += 1;
+        }
+        assert_curve_invariant(&c);
+        assert_s_pos(&c, &all);
+        assert_weights(&c, &all, at_day(day) / SEC);
+        assert_eq!(
+            total_in - total_out,
+            c.reserve + c.fund + c.protocol_fees + c.pledges_held,
+            "every yoctoNEAR is accounted for (day {day})"
+        );
+        // the escrow holds exactly what the rescued rounds still owe
+        let owed: u128 = (1..=c.round_count)
+            .filter_map(|k| c.get_round(k))
+            .filter(|r| r.rescued)
+            .map(|r| r.tokens_left.0)
+            .sum();
+        assert_eq!(balance(&c, &coin_id()), owed, "escrow matches the open rounds");
+    }
+    assert!(rescues > 0 && fails > 0 && collects > 0 && withdrawals > 0,
+        "the run must cover rescues ({rescues}), failures ({fails}), collects ({collects}) and withdrawals ({withdrawals})");
+}
