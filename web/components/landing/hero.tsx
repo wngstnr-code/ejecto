@@ -20,10 +20,11 @@ export function Hero() {
       <div className="grid-bg pointer-events-none absolute inset-0 opacity-40 [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
 
       {/* giant background word, scrolling right to left without a seam */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-[18%] select-none overflow-hidden" aria-hidden>
+      {/* Phones: lifted inside the first screen, behind the pilot. Larger screens: half off the bottom edge. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-[5dvh] select-none overflow-hidden sm:bottom-0 sm:translate-y-[18%]" aria-hidden>
         <div className="flex w-max animate-marquee-slow">
           {[0, 1].map((i) => (
-            <div key={i} className="display flex shrink-0 whitespace-nowrap text-[30vw] text-panel">
+            <div key={i} className="display flex shrink-0 whitespace-nowrap text-[38vw] text-panel sm:text-[30vw]">
               {Array.from({ length: 3 }, (_, j) => (
                 <span key={j} className="pr-[6vw]">
                   EJECTO
@@ -34,7 +35,7 @@ export function Hero() {
         </div>
       </div>
 
-      <div className="relative mx-auto grid w-full max-w-7xl flex-1 items-center gap-6 px-4 pb-[16vh] pt-20 sm:px-8 lg:grid-cols-[1.05fr_1fr]">
+      <div className="relative mx-auto grid w-full max-w-7xl flex-1 items-center gap-6 px-4 pb-[6vh] pt-20 sm:px-8 sm:pb-[16vh] lg:grid-cols-[1.05fr_1fr]">
         <div className="relative z-10">
           <h1 className="display text-[12vw] text-bone sm:text-[11vw] lg:text-[6.6rem]">
             <span className="block overflow-hidden">
