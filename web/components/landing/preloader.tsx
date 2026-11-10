@@ -101,7 +101,7 @@ export function Preloader() {
   return (
     <div ref={root} className="fixed inset-0 z-[100] bg-ink" role="status" aria-label="Loading Ejecto">
       {/* Greeting bubble, next to where the 3D pilot pops up. */}
-      <div ref={bubble} className="absolute left-1/2 top-[13%] origin-bottom-left translate-x-[8vh] opacity-0 sm:translate-x-[14vh]">
+      <div ref={bubble} className="absolute left-[min(calc(50%_+_8vh),calc(100%_-_13rem))] top-[13%] origin-bottom-left opacity-0 sm:left-1/2 sm:translate-x-[14vh]">
         <div className="display whitespace-nowrap rounded-2xl bg-hazard px-5 py-3 text-lg text-ink sm:text-2xl">Hi! Strap in.</div>
         <div className="ml-6 h-0 w-0 border-x-[12px] border-t-[14px] border-x-transparent border-t-hazard" />
       </div>
