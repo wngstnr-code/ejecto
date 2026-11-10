@@ -11,6 +11,7 @@ import { prefersReducedMotion } from "@/lib/gsap";
 import { useWallet } from "@/lib/wallet";
 import { CurveChart } from "./curve-chart";
 import { ActivityLog } from "./activity-log";
+import { CrewBoard } from "./crew-board";
 import { PriceHistory, useCoinHistory } from "./price-history";
 import { EngineMeter } from "./engine-meter";
 import { ClaimPanel, EjectPanel, SeatPanel } from "./seat-panels";
@@ -110,7 +111,8 @@ export function CoinView({ id }: { id: string | null }) {
             <PriceHistory status={status} history={chain.history} error={chain.error} />
             <CurveChart status={status} />
             {ej && <EjectRecord status={status} />}
-            <ActivityLog n={ej ? "05" : "04"} history={chain.history} error={chain.error} />
+            <CrewBoard n={ej ? "05" : "04"} coinId={id} status={status} history={chain.history} />
+            <ActivityLog n={ej ? "06" : "05"} history={chain.history} error={chain.error} />
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
