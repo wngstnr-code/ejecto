@@ -94,6 +94,8 @@ export function TradePanel({
   if (!problem && q?.error) problem = q.error;
   const canSubmit = !!accountId && !!amount && amount > 0n && !problem && !!(q?.buy || q?.sell) && !busy;
 
+  const setShare = (pct: bigint) => setInput(formatUnitsExact((tokenBal * pct) / 100n, 18));
+
   const setMax = () => {
     if (mode === "buy" && nearBal !== null) setInput(formatUnitsExact(nearBal > GAS_BUFFER ? nearBal - GAS_BUFFER : 0n, 24));
     if (mode === "sell") setInput(formatUnitsExact(tokenBal, 18));
@@ -195,6 +197,31 @@ export function TradePanel({
             )}
           </span>
         </div>
+
+        {/* Sell is entered in tokens: quick shares of the balance and the NEAR it brings, right under the input. */}
+        {mode === "sell" && (
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <div className="flex gap-2">
+              {[25n, 50n, 100n].map((p) => (
+                <button
+                  key={p.toString()}
+                  type="button"
+                  disabled={tokenBal === 0n}
+                  onClick={() => {
+                    setShare(p);
+                    setTx(null);
+                  }}
+                  className="label rounded-full border border-line px-3 py-1.5 text-muted transition-colors enabled:hover:border-hazard enabled:hover:text-hazard disabled:opacity-40"
+                >
+                  {p === 100n ? "Max" : `${p}%`}
+                </button>
+              ))}
+            </div>
+            <span className="label text-muted">
+              {q?.sell ? <Amount className="text-bone">{`\u2248 ${formatNear(yoctoToNear(q.sell.near_out), 4)}`}</Amount> : `in ${symbol}, not NEAR`}
+            </span>
+          </div>
+        )}
 
         {/* quote */}
         <dl className="label mt-5 space-y-2.5">
