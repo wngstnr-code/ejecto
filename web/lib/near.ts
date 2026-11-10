@@ -53,23 +53,62 @@ export type CoinInfo = {
   created_at: number;
 };
 
+export type EjectSnapshot = { t_e: number; reserve_e: string; supply_e: string; fund_e: string; w_e: string };
+
+/** `status()` of a coin. All amounts are yoctoNEAR or raw token units (18 decimals) as strings. */
 export type CoinStatus = {
   name: string;
   symbol: string;
   fee_preset: string;
+  fund_buy_bps: number;
+  fund_sell_bps: number;
+  protocol_buy_bps: number;
   day_length_sec: number;
   demo_time: boolean;
+  launch_ts: number;
+  now_ts: number;
+  protocol_account: string;
+  factory: string;
   supply: string;
+  /** yoctoNEAR per whole token */
   price: string;
   reserve: string;
   fund: string;
+  protocol_fees: string;
   day: number;
   window_buys: string;
   peak_window: string;
   alive_threshold: string;
   ejectable: boolean;
-  ejected: null | { t_e: number; reserve_e: string; supply_e: string; fund_e: string; w_e: string };
+  total_weight: string;
+  ejected: null | EjectSnapshot;
 };
+
+/** `holder(account_id)`: the "your seat" numbers. */
+export type HolderView = {
+  balance: string;
+  /** Net basis in yoctoNEAR, can be negative. */
+  basis: string;
+  weight: string;
+  total_weight: string;
+  claimed: boolean;
+  /** Payout if EJECT happened now (before EJECT), or the claimable payout (after). */
+  reserve_part: string;
+  fund_part: string;
+};
+
+export type BuyQuote = {
+  tokens_out: string;
+  cost: string;
+  fund_fee: string;
+  protocol_fee: string;
+  dust_to_fund: string;
+  price_after: string;
+};
+
+export type SellQuote = { gross: string; fund_fee: string; near_out: string; price_after: string };
+
+export type FtMetadata = { name: string; symbol: string; icon: string | null; decimals: number };
 
 export type FactoryConfig = {
   coin_code_hash: string;
@@ -109,4 +148,51 @@ export async function accessKeyCount(accountId: string, signal?: AbortSignal): P
   const json = (await res.json()) as { result?: { keys?: unknown[] }; error?: RpcError };
   if (json.error || !json.result?.keys) throw new Error(json.error?.cause?.name ?? "RPC error");
   return json.result.keys.length;
+}
+
+export function getCoin(symbol: string, signal?: AbortSignal) {
+  return viewCall<CoinInfo | null>(FACTORY_ID, "get_coin", { symbol }, signal);
+}
+
+export function getHolder(coinId: string, accountId: string, signal?: AbortSignal) {
+  return viewCall<HolderView>(coinId, "holder", { account_id: accountId }, signal);
+}
+
+export function getMetadata(coinId: string, signal?: AbortSignal) {
+  return viewCall<FtMetadata>(coinId, "ft_metadata", {}, signal);
+}
+
+export function quoteBuy(coinId: string, yocto: bigint, signal?: AbortSignal) {
+  return viewCall<BuyQuote>(coinId, "quote_buy", { amount: yocto.toString() }, signal);
+}
+
+export function quoteSell(coinId: string, units: bigint, signal?: AbortSignal) {
+  return viewCall<SellQuote>(coinId, "quote_sell", { amount: units.toString() }, signal);
+}
+
+export function storageBalanceOf(coinId: string, accountId: string, signal?: AbortSignal) {
+  return viewCall<{ total: string; available: string } | null>(coinId, "storage_balance_of", { account_id: accountId }, signal);
+}
+
+export function storageBounds(coinId: string, signal?: AbortSignal) {
+  return viewCall<{ min: string; max: string | null }>(coinId, "storage_balance_bounds", {}, signal);
+}
+
+/** Liquid NEAR balance of an account (amount minus locked), in yoctoNEAR. */
+export async function accountBalance(accountId: string, signal?: AbortSignal): Promise<bigint> {
+  const res = await fetch(RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: "ejecto",
+      method: "query",
+      params: { request_type: "view_account", finality: "final", account_id: accountId },
+    }),
+  });
+  if (!res.ok) throw new Error(`RPC HTTP ${res.status}`);
+  const json = (await res.json()) as { result?: { amount: string; locked: string }; error?: RpcError };
+  if (json.error || !json.result) throw new Error(json.error?.cause?.name ?? "RPC error");
+  return BigInt(json.result.amount) - BigInt(json.result.locked);
 }
