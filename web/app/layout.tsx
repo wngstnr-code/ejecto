@@ -18,7 +18,7 @@ const DESCRIPTION =
   "Every Ejecto coin trades on a bonding curve with a built-in Ejecto Fund. When the coin dies, anyone can press EJECT and every holder claims a fair share. Keyless contracts on NEAR.";
 
 // Static brand assets in public/brand (og.png and apple-icon.png were rendered once from
-// public/brand/ejecto-mark.svg). Full URLs, because GitHub Pages serves the site under a sub-path.
+// public/brand/ejecto-mark.svg). Full URLs, because social previews need absolute links.
 const OG_IMAGE = { url: `${SITE_URL}/brand/og.png`, width: 1200, height: 630, alt: "Ejecto: the memecoin with an ejection seat" };
 
 export const metadata: Metadata = {

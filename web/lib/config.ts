@@ -21,7 +21,7 @@ export function explorerAccount(accountId: string) {
   return `${EXPLORER_URL}/address/${accountId}`;
 }
 
-/** Prefix a path in /public with the base path (needed on GitHub Pages). */
+/** Prefix a path in /public with the base path (only set when the site is served under a sub-path). */
 export function asset(path: string) {
   return `${BASE_PATH}${path}`;
 }
