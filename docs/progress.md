@@ -87,6 +87,12 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 | 11 | Unit test gap: the `ft_transfer_call` refund path was never tested | medium | Tests with a mocked promise result (`resolve_with_unused`). |
 | 12 | Peak inflation griefing (found while thinking like an attacker) | medium | Not fixed, see Known issues. |
 
+## Competitor review (2026-11-10)
+
+- 468 public submissions (nearhackathon.com API); Memecoins With Mechanics has 28, the fewest of all tracks; Social Money has 44.
+- Closest: LIFO (pays the newest buyers first in a crash, uses a server Worker for demo signing and settle), Tripwire (keyless rug-proof launchpad). No other entry ends a dead coin with a pro-rata snapshot plus a loyalty fund.
+- Gaps closed: on-chain log on the coin page (D-032); README "For judges" table, track prompt answers, sybil section tied to tests, "How Ejecto differs".
+
 ## Review notes (2026-11-10, pre-submission)
 
 - Phone check at 390 px (Playwright, every page): the live landing scrolled sideways by 58 px (hero title too wide). Fixed: hero, Safeguards and The Math headings scale with the viewport, the crash readouts use a 2x2 grid, the crash stage text shows only the active stage, the 3D pilot shrinks away after the hero on phones so it never covers text, the Coins table becomes a two-column list (price and fund under the name), the demo banner is shortened. No horizontal overflow left on any page.
