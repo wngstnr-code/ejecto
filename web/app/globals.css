@@ -176,6 +176,27 @@ html[data-intro="on"] .pilot-layer {
   animation: glitch-b 0.7s steps(1) infinite;
   mix-blend-mode: screen;
 }
+/* Live badge (landing safeguards): waves light up outward, the core breathes. */
+@keyframes live-wave {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  35% {
+    opacity: 1;
+  }
+}
+
+@keyframes live-core {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.25);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

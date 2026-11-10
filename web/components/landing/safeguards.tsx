@@ -139,12 +139,15 @@ export function Safeguards() {
 }
 
 /** Glowing green dot with two radar rings, marking values read straight from the chain. Turns black on hover. */
+/** Live chain read: a broadcast icon whose waves light up one after another, outward. */
 function LiveBadge() {
   return (
-    <span title="Read live from NEAR testnet" aria-label="Read live from NEAR testnet" className="relative flex h-2.5 w-2.5 items-center justify-center">
-      <span className="absolute inset-0 animate-radar rounded-full border-2 border-hud group-hover:border-ink" />
-      <span className="absolute inset-0 animate-radar rounded-full border-2 border-hud [animation-delay:0.8s] group-hover:border-ink" />
-      <span className="relative h-2.5 w-2.5 rounded-full bg-hud shadow-[0_0_10px_3px_rgb(61_220_132_/_0.7)] group-hover:bg-ink group-hover:shadow-none" />
+    <span title="Read live from NEAR testnet" aria-label="Read live from NEAR testnet" className="flex items-center text-hazard transition-colors group-hover:text-ink">
+      <svg viewBox="0 0 24 16" className="h-4 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+        <circle cx="12" cy="8" r="2.2" fill="currentColor" stroke="none" className="origin-center animate-[live-core_1.6s_ease-in-out_infinite] [transform-box:fill-box]" />
+        <path d="M8.3 4.6a4.8 4.8 0 0 0 0 6.8M15.7 4.6a4.8 4.8 0 0 1 0 6.8" className="animate-[live-wave_1.6s_ease-in-out_infinite]" />
+        <path d="M5.2 1.8a8.8 8.8 0 0 0 0 12.4M18.8 1.8a8.8 8.8 0 0 1 0 12.4" className="animate-[live-wave_1.6s_ease-in-out_0.25s_infinite]" />
+      </svg>
     </span>
   );
 }
