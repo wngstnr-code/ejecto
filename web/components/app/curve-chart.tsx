@@ -1,9 +1,9 @@
 "use client";
 
-import { useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { formatCompact, formatNear, formatPct, unitsToTokens, yoctoToNear } from "@/lib/format";
 import type { CoinStatus } from "@/lib/near";
-import { Amount, PanelTitle, PriceText } from "./ui";
+import { Amount, LiveIcon, PanelTitle, PriceText } from "./ui";
 
 // Curve constants fixed by the factory (spec section 4): price(s) = P0 + K * s, in NEAR per token.
 const P0 = 2e-8;
@@ -23,7 +23,9 @@ const PAD = { l: 8, r: 8, t: 16, b: 8 };
  */
 export function CurveChart({ status }: { status: CoinStatus }) {
   const ejected = !!status.ejected;
-  const supply = unitsToTokens(status.ejected ? status.ejected.supply_e : status.supply);
+  const liveSupply = unitsToTokens(status.ejected ? status.ejected.supply_e : status.supply);
+  // The page polls the chain every few seconds; glide to each new supply instead of jumping.
+  const supply = useTween(liveSupply);
   const reserve = yoctoToNear(status.ejected ? status.ejected.reserve_e : status.reserve);
   const fundFee = status.fund_buy_bps / 100;
   const protoFee = status.protocol_buy_bps / 100;
@@ -59,7 +61,19 @@ export function CurveChart({ status }: { status: CoinStatus }) {
 
   return (
     <section>
-      <PanelTitle n="02" right={<span className="label text-muted">Price = P0 + K x supply</span>}>
+      <PanelTitle
+        n="02"
+        right={
+          ejected ? (
+            <span className="label text-muted">Frozen at eject</span>
+          ) : (
+            <span className="label flex items-center gap-2 text-hazard">
+              <LiveIcon />
+              Live, every 4 s
+            </span>
+          )
+        }
+      >
         Bonding curve
       </PanelTitle>
       <div className="relative mt-8">
@@ -92,6 +106,18 @@ export function CurveChart({ status }: { status: CoinStatus }) {
             <>
               <line x1={x(supply)} x2={x(supply)} y1={y(0)} y2={y(price(supply))} className="stroke-hazard" strokeDasharray="3 4" />
               <circle cx={x(supply)} cy={y(price(supply))} r="12" className="fill-hazard/20" />
+              {/* A ring goes out each time the supply changes on chain. */}
+              {!ejected && (
+                <circle
+                  key={liveSupply}
+                  cx={x(supply)}
+                  cy={y(price(supply))}
+                  r="10"
+                  fill="none"
+                  strokeWidth="2"
+                  className="origin-center stroke-hazard opacity-0 animate-[ring-out_1.2s_ease-out] [transform-box:fill-box]"
+                />
+              )}
               <circle cx={x(supply)} cy={y(price(supply))} r="6" className="fill-hazard" />
               <text
                 x={x(supply)}
@@ -152,7 +178,7 @@ export function CurveChart({ status }: { status: CoinStatus }) {
           <Readout label={ejected ? "Price at eject" : "Price now"} value={<Amount><PriceText value={price(supply)} /></Amount>} />
           <Readout label="Reserve (shaded)" value={<Amount>{formatNear(reserve, 3)}</Amount>} />
         </div>
-        <p className="label mt-4 text-muted">Hover the curve to read any point.</p>
+        <p className="label mt-4 text-muted">Price = P0 + K x supply. Hover the curve to read any point.</p>
       </div>
     </section>
   );
@@ -174,4 +200,26 @@ function Readout({ label, value }: { label: string; value: React.ReactNode }) {
       <div className="mt-1 text-lg font-semibold tabular-nums">{value}</div>
     </div>
   );
+}
+
+/** Eases a number toward its latest value over about 0.8 s (ease out cubic). */
+function useTween(target: number, ms = 800): number {
+  const [value, setValue] = useState(target);
+  const current = useRef(target);
+  useEffect(() => {
+    const from = current.current;
+    if (from === target) return;
+    const start = performance.now();
+    let raf = 0;
+    const step = (now: number) => {
+      const k = Math.min(1, (now - start) / ms);
+      const v = from + (target - from) * (1 - Math.pow(1 - k, 3));
+      current.current = v;
+      setValue(v);
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+  return value;
 }

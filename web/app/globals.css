@@ -234,6 +234,18 @@ html[data-intro="on"] .pilot-layer {
   }
 }
 
+/* Curve chart: a ring goes out from the current point when the supply changes. */
+@keyframes ring-out {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
