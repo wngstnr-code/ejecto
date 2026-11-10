@@ -44,6 +44,7 @@ export function EngineMeter({ status, phase }: { status: CoinStatus; phase: Phas
             <div className="mt-2 text-4xl font-semibold tabular-nums tracking-tight sm:text-5xl">
               <Amount icon="text-muted ml-1">{ejected ? "0" : formatNear(windowBuys)}</Amount>
             </div>
+            <div className="label mt-2 text-muted/70">NEAR spent on buys. Sells do not count.</div>
           </div>
           <div className="text-right">
             <div className="label text-muted">Alive line</div>
