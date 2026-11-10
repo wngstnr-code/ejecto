@@ -12,7 +12,7 @@ Ejecto is a memecoin launchpad on NEAR where every coin has an ejection seat. Ea
 | Demo video | https://x.com/Dudung_gg/status/2120172645438374353 |
 | Factory contract (source verified) | [`factory.ejecto.testnet`](https://testnet.nearblocks.io/address/factory.ejecto.testnet/contract/code) |
 | Example coin, launched, ejected and claimed on video | [`pilot.factory.ejecto.testnet`](https://testnet.nearblocks.io/address/pilot.factory.ejecto.testnet) |
-| Tracks | Memecoins With Mechanics, Social Money |
+| Tracks | Memecoins With Mechanics, Social Money ([why social](#social-money)) |
 
 Built at NEAR HACKATHON 2026.
 
@@ -51,7 +51,7 @@ Late buyers can still lose some money: early buyers got more tokens per NEAR, so
 | Criterion | Where it is answered |
 |---|---|
 | Technical implementation | All of the mechanic is in the coin contract: bonding curve [`curve.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/curve.rs), loyalty weights (net NEAR at risk times time) [`accounting.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/accounting.rs), the 14-day alive detector [`detector.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/detector.rs), and [`eject`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/lib.rs#L376) / [`claim`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/lib.rs#L409) in `lib.rs`. 71 coin unit tests, 15 factory unit tests and 3 sandbox tests with the real wasm ([Run it locally](#run-it-locally)). Reproducible build, source verified on NearBlocks. `node scripts/verify-chain.mjs` re-checks the live deployment with no keys. |
-| Design | A static app with five pages (landing, Coins, Coin, Launch, My seats), phone ready. The coin page shows the engine (14-day buys against the alive line), the price history rebuilt from chain, the curve, the eject record and an on-chain log of every action. |
+| Design | A static app with five pages (landing, Coins, Coin, Launch, My seats), phone ready. The coin page shows the engine (14-day buys against the alive line), the price history rebuilt from chain, the curve, the eject record, the **Crew** board (holders ranked by loyalty) and an on-chain log of every action. Holders can share their seat or their parachute on X. |
 | Impact | The loyal holders are the ones who lose the most when a memecoin dies. In the 500-coin simulation Ejecto takes the share of traders wiped out from 4.37% to 0% and cuts losses per coin by 10.8% ([Simulation](#simulation)). The recorded testnet run shows the same on real transactions ([The demo run, on chain](#the-demo-run-on-chain)). |
 | Originality | The ending is the feature: one EJECT moment where everybody exits together, plus a fund that pays loyalty. See [How Ejecto differs](#how-ejecto-differs). |
 | Sustainability | Coins have no access keys and no owner methods, every parameter is set once in `new`, anyone can call `eject`, and there is no backend to switch off. The one remaining owner is the factory's, for future launches only ([Security model](#security-model-and-known-limits)). |
@@ -63,7 +63,7 @@ Late buyers can still lose some money: early buyers got more tokens per NEAR, so
 | An NEP-141 token with the mechanic in the contract, not in a backend somebody could switch off | Yes. Curve, fund, alive detector, EJECT and claim are all in the coin contract. The web app is a static site; nothing calls the contract on a timer, and `eject` can be called by anyone. |
 | All parameters set at launch and readable by anyone, no admin key | Set once by the factory's `create_coin` and the coin's `new`, readable with the `status` view. The coin account has 0 access keys and no setter methods. |
 | Sybil resistance good enough for a demo, with its limits written plainly | [Sybil resistance and its limits](#sybil-resistance-and-its-limits), each claim backed by a named test. |
-| A page with the current state and a log | The coin page: live engine, price, reserve and fund, and the **On-chain log** of every buy, sell, EJECT and claim with links to the transactions. |
+| A page with the current state and a log | The coin page: live engine, price, reserve and fund, the **Crew** board ranking every holder by loyalty like a high score, and the **On-chain log** of every buy, sell, EJECT and claim with links to the transactions. |
 | Simulate 60 days first | [`sim/ejecto-sim.mjs`](sim/ejecto-sim.mjs): 500 coins, 400 traders each, 60 days, with and without Ejecto, plus whale and wash-trading attacks and three fee presets. Written before the contract. |
 
 ## Try it in 5 minutes (hosted app, NEAR testnet)
@@ -73,7 +73,7 @@ You need a NEAR **testnet** wallet with about 3 NEAR (launch costs 2.67 NEAR). T
 | # | Do | See |
 |---|---|---|
 | 1 | Open https://ejecto.vercel.app/coins/ | A live table of every coin from the factory, with status badges. `Pilot ($PILOT)` and `Seato ($SEAT)` are **Ejected**. |
-| 2 | Click **Pilot** | The coin page: price, supply, reserve, Ejecto Fund, the engine meter showing **Engine off**, the price history rebuilt from chain, the eject record, and the **On-chain log**: launch buys, the whale, EJECT and four claims, each linked to its transaction. |
+| 2 | Click **Pilot** | The coin page: price, supply, reserve, Ejecto Fund, the engine meter showing **Engine off**, the price history rebuilt from chain, the eject record, the **Crew** board (the whale ranks last with 3.3% loyalty against 19% to 41% for the early holders), and the **On-chain log**: launch buys, the whale, EJECT and four claims, each linked to its transaction. |
 | 3 | Click **Connect wallet** (top right) and pick a testnet wallet | Your account in the header. |
 | 4 | Go to **Launch**. Enter a name and a free symbol, keep **Demo time** (1 day = 10 s) and press **Launch** | "Coin is live" with **0 access keys** and a link to the explorer. |
 | 5 | Click **Open the coin**, enter `0.2` NEAR and press **Buy** | The price history and the bonding curve move; **Your seat** shows your balance, net basis and fund weight. |
@@ -208,6 +208,38 @@ An agent-based model (zero dependencies): 500 coins, 400 traders each, 60 days, 
 
 The simulation is a model, not market data.
 
+#### Tested alternative: a net-buys peak
+
+The one medium known issue is peak inflation griefing. The obvious fix is to measure the peak on buys minus sells, so a buy that is sold again adds almost nothing. We simulated it on the same agents and seeds before touching the contract:
+
+```bash
+node sim/peak-rule-experiment.mjs sim/out   # about 30 s, writes sim/out/peak-rule.json
+```
+
+| | Gross buys (the contract) | Net buys (candidate) |
+|---|---|---|
+| Traders wiped out | 0% | 0% |
+| Losses cut against the exit race | 10.78% | 10.21% |
+| Median EJECT day | 28 | 32 |
+
+A griefer buys X NEAR on day 2, then sells it the same day (flash) or 14 days later (patient), on 200 coins:
+
+| Attack | Coins ejected earlier, gross | Coins ejected earlier, net | Attacker cost | Other holders' losses (gross) |
+|---|---|---|---|---|
+| Flash, 500 NEAR | 94% (3 days) | 8% (1 day) | 4.0% of X | **-5.3%** |
+| Flash, 2,000 NEAR | 100% (7 days) | 23.5% (1 day) | 4.0% of X | **-20.9%** |
+| Flash, 10,000 NEAR | 100% (12 days) | 80% (2 days) | 4.0% of X | **-78.9%** |
+| Patient, 500 NEAR | 94% (3 days) | 91.5% (2 days) | 1.5% of X | +27.1% |
+| Patient, 2,000 NEAR | 100% (7 days) | 100% (7 days) | 21.9% of X | +36.2% |
+
+What this says, in the model:
+
+- The net rule stops the flash version, but the flash version does not hurt holders: the griefer's fees go into the fund, so the other holders lose less, not more.
+- The net rule does not stop the patient version. That one is a whale who buys big and dumps 14 days later, which hurts holders on any bonding curve, with or without Ejecto.
+- The net rule also makes dying coins live 4 days longer and gives back a little of the loss reduction.
+
+So the contract keeps the gross-buys peak (decision D-034). The model has no coin with a long life, so the cost of ejecting a coin that a community still wanted is not measured; that is why the issue stays listed as medium.
+
 ---
 
 ## Architecture
@@ -249,8 +281,29 @@ The limits, plainly:
 - **No one-person-one-share.** A farm of accounts gets nothing extra, but Ejecto also does not reward being many people. Shares follow money and time.
 - **Early buyers are favored.** They got more tokens per NEAR on the curve, so the pro-rata reserve split favors them, and late buyers can still lose part of their money. There is no premine or creator allocation, so the creator is only early if they buy early, on the same curve as everyone.
 - **A rich holder can postpone EJECT** by buying at least the alive line (1 NEAR or 5% of the best window) every 14 days. Those buys pay fees into the fund for everyone.
-- **Peak inflation griefing** (medium, known): a large buy followed by a sell raises the best window, so an active coin can be pushed under 5% of a fake peak 14 days later and ejected. It costs about 4% of the fake peak, most of it paid into the fund, and nobody can steal anything because holders get a fair exit.
+- **Peak inflation griefing** (medium, known): a large buy followed by a sell raises the best window, so an active coin can be pushed under 5% of a fake peak 14 days later and ejected a few days early. Nobody can steal anything: holders still get the fair pro-rata exit. We simulated it and a fix for it, see [Tested alternative: a net-buys peak](#tested-alternative-a-net-buys-peak).
 - The full list is under [Known issues in `docs/progress.md`](docs/progress.md).
+
+## Social Money
+
+A memecoin is a community with a price. Ejecto turns the community's loyalty into money and makes it visible:
+
+- **The fund pays loyalty, not size.** Every trade feeds the Ejecto Fund, and at EJECT it is split by net NEAR at risk times time held. Staying with your community is what earns it.
+- **The Crew board** on every coin ranks the holders by that loyalty, read live from the contract, like a high score.
+- **One fair ending for everyone.** When the coin dies there is no race that rewards bots and insiders: the whole crew exits together, and anyone can pull the handle for everyone.
+- **Share the outcome.** "Share my seat" and "Share my parachute" post what a seat pays, or what a claim paid, to X with a link to the coin.
+
+## Ejecto and meme.cooking
+
+[meme.cooking](https://meme.cooking), the launchpad partner of the Memecoins track, and Ejecto cover the two ends of a memecoin's life:
+
+| | meme.cooking | Ejecto |
+|---|---|---|
+| Solves | A fair **birth** | A fair **death** |
+| How | A deposit countdown (5 minutes to 1 day) with a soft cap. On launch, about half of the supply and the deposited NEAR go into a Ref Finance pool whose LP is locked for 69 years; the other half goes to the depositors. Below the soft cap everyone is refunded. | The coin trades on a bonding curve in its own keyless contract. When 14-day buys fall under the alive line, anyone presses EJECT and every holder claims a pro-rata share of the reserve plus a loyalty share of the fund. |
+| After the launch | Trading on the Ref AMM | Trading on the curve until EJECT |
+
+They do not compete: meme.cooking makes sure a launch is not rigged, Ejecto makes sure the ending is not a race. The natural next step is an **Ejecto seat for AMM tokens**: holders of a token that trades on Ref (such as a meme.cooking launch) lock it in a seat contract that applies the same ending, a death rule, one EJECT and a loyalty-weighted split. That needs a death rule that reads the pool on chain instead of the curve's own buys, still without an oracle or a backend, so it is future work and not part of this submission. Facts on meme.cooking from its [docs](https://github.com/Shitzu-Apes/meme-cooking-docs).
 
 ## How Ejecto differs
 
@@ -267,7 +320,7 @@ Ejecto treats the death of a memecoin as the normal case and designs the ending:
 
 - Coins are keyless and have no admin path; the only way to change one is not to have deployed it.
 - The **factory** still has an owner (`ejecto.testnet`) during the hackathon, so the coin code for *future* launches can be replaced. Coins already launched are never affected. This would be locked before any mainnet use.
-- **Peak inflation griefing** (medium): a large buy followed by a sell raises the peak window, so 14 days later an active coin can fall under 5% of the inflated peak and be ejected. It is costly (about 4% of the fake peak, mostly paid into the fund) and nobody can steal anything, since holders get a fair exit. A decaying peak is a possible fix.
+- **Peak inflation griefing** (medium): a large buy followed by a sell raises the peak window, so 14 days later an active coin can fall under 5% of the inflated peak and be ejected early. Nobody can steal anything, since holders get a fair exit. A net-buys peak was simulated as a fix and rejected ([Tested alternative](#tested-alternative-a-net-buys-peak)).
 - Late buyers can still lose part of their money (see the demo run and the simulation).
 - Testnet only. Not audited.
 
