@@ -1,14 +1,17 @@
 "use client";
 
-import { Environment, Lightformer, useGLTF } from "@react-three/drei";
+import { Environment, Lightformer, useGLTF, useProgress } from "@react-three/drei";
 import { Canvas, type ThreeEvent, useFrame, useThree } from "@react-three/fiber";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { asset } from "@/lib/config";
 import { prefersReducedMotion, ScrollTrigger } from "@/lib/gsap";
+import { loadSignal } from "@/lib/load-signal";
 import { DRAW_END, LAUNCH_START, pilotScroll } from "@/lib/pilot-scroll";
 
 const MODEL_URL = asset("/mascot/ejecto-pilot.glb");
+/** Same pilot, static waving pose. Only used for the loading intro, then cross-faded into MODEL_URL. */
+const WAVE_URL = asset("/mascot/ejecto-pilot-wave.glb");
 const MODEL_HEIGHT = 1.35;
 
 /**
@@ -18,7 +21,8 @@ const MODEL_HEIGHT = 1.35;
 export default function PilotStage() {
   useScrollTriggers();
   return (
-    <div className="pointer-events-none fixed inset-0 z-30" aria-hidden>
+    <div className="pilot-layer pointer-events-none fixed inset-0 z-30" aria-hidden>
+      <LoadReporter />
       <Canvas
         dpr={[1, 1.5]}
         camera={{ position: [0, 0, 3.1], fov: 30 }}
@@ -40,6 +44,15 @@ export default function PilotStage() {
       </Canvas>
     </div>
   );
+}
+
+/** Publishes the real download progress of the 3D assets to the loading screen. */
+function LoadReporter() {
+  const { progress } = useProgress();
+  useEffect(() => {
+    if (!loadSignal.get().ready) loadSignal.set({ progress: Math.max(loadSignal.get().progress, progress) });
+  }, [progress]);
+  return null;
 }
 
 /** Wire ScrollTrigger to the shared pilotScroll store. */
@@ -80,9 +93,47 @@ const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 
 type Pose = { x: number; y: number; s: number };
 
+/** Clone a GLB scene, drop its lights and normalize it to MODEL_HEIGHT, centered on the origin. */
+function normalize(scene: THREE.Object3D) {
+  const copy = scene.clone(true);
+  const lights: THREE.Object3D[] = [];
+  copy.traverse((o) => {
+    if ((o as THREE.Light).isLight) lights.push(o);
+  });
+  lights.forEach((l) => l.removeFromParent());
+  const box = new THREE.Box3().setFromObject(copy);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const k = MODEL_HEIGHT / size.y;
+  copy.scale.setScalar(k);
+  copy.position.set(-center.x * k, -center.y * k, -center.z * k);
+  return { copy, size, k };
+}
+
 function Pilot() {
   const { scene } = useGLTF(MODEL_URL);
+  const { scene: waveScene } = useGLTF(WAVE_URL);
   const viewport = useThree((s) => s.viewport);
+
+  const waveModel = useMemo(() => {
+    const { copy } = normalize(waveScene);
+    copy.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
+      mat.color.multiplyScalar(1.2); // this export came out a little darker than the main model
+      // The raised forearm and glove swing side to side around the elbow (the helmet stays still).
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = LEGS.uTime;
+        shader.vertexShader = shader.vertexShader
+          .replace("#include <common>", `#include <common>\n${HAND_WAVE_GLSL}`)
+          .replace("#include <beginnormal_vertex>", "#include <beginnormal_vertex>\nobjectNormal = handWave(position, objectNormal, true);")
+          .replace("#include <begin_vertex>", "#include <begin_vertex>\ntransformed = handWave(position, transformed, false);");
+      };
+      mesh.material = mat;
+    });
+    return copy;
+  }, [waveScene]);
 
   const { model, bottom, nozzleX, nozzleZ } = useMemo(() => {
     const copy = scene.clone(true);
@@ -100,27 +151,24 @@ function Pilot() {
       };
       mesh.material = mat;
     });
-    // The exporter shipped its own lights. We light the scene ourselves.
-    const lights: THREE.Object3D[] = [];
-    copy.traverse((o) => {
-      if ((o as THREE.Light).isLight) lights.push(o);
-    });
-    lights.forEach((l) => l.removeFromParent());
-    // Normalize: fixed height, centered on the origin.
-    const box = new THREE.Box3().setFromObject(copy);
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const k = MODEL_HEIGHT / size.y;
-    copy.scale.setScalar(k);
-    copy.position.set(-center.x * k, -center.y * k, -center.z * k);
-    return { model: copy, bottom: -MODEL_HEIGHT / 2, nozzleX: size.x * k * 0.17, nozzleZ: size.z * k * 0.3 };
+    // Lights dropped, height normalized, centered on the origin.
+    const { copy: model, size, k } = normalize(copy);
+    return { model, bottom: -MODEL_HEIGHT / 2, nozzleX: size.x * k * 0.17, nozzleZ: size.z * k * 0.3 };
   }, [scene]);
+
+  // The model is ready once this component mounts (useGLTF suspends until then).
+  useEffect(() => {
+    loadSignal.set({ progress: 100, ready: true });
+  }, []);
 
   const group = useRef<THREE.Group>(null);
   const flames = useRef<THREE.Group>(null);
+  const introLight = useRef<THREE.DirectionalLight>(null);
+  const mainRef = useRef<THREE.Group>(null);
+  const waveRef = useRef<THREE.Group>(null);
   const chute = useRef<THREE.Group>(null);
   // Smoothed horizontal speed, the pendulum roll and the eased yaw.
-  const motion = useRef({ vx: 0, roll: 0, rollV: 0, yaw: -0.35 });
+  const motion = useRef({ vx: 0, roll: 0, rollV: 0, yaw: -0.35, handedOver: false });
   // Mouse drag state for spinning the pilot.
   const drag = useRef({ dragging: false, lastX: 0, lastY: 0, rotY: 0, rotX: 0, vel: 0, idle: 0 });
 
@@ -219,6 +267,27 @@ function Pilot() {
         }
       }
     }
+    // Loading intro: centered and front-facing, greeting with small hops, then glide into the hero pose.
+    const intro = pilotScroll.intro;
+    // Hops and wiggles stop softly as soon as the glide to the hero starts.
+    const greet = (1 - THREE.MathUtils.smoothstep(intro, 0, 0.12)) * pilotScroll.appear;
+    // One full turn during the glide. The waving model is swapped for the main model at the half turn,
+    // when the pilot shows its back: both models look the same from behind (the seat back), so it is invisible.
+    const introTurn = intro < 1 ? ease(intro) * Math.PI * 2 : 0;
+    if (waveRef.current) waveRef.current.visible = intro < 0.5;
+    if (mainRef.current) mainRef.current.visible = intro >= 0.5;
+    if (intro < 1) {
+      const k = ease(intro);
+      const introPose: Pose = narrow ? { x: 0, y: -h * 0.06, s: 0.5 } : { x: 0, y: -h * 0.07, s: 0.6 };
+      x = THREE.MathUtils.lerp(introPose.x, x, k);
+      y = THREE.MathUtils.lerp(introPose.y, y, k) + Math.abs(Math.sin(t * 5.2)) * h * 0.045 * greet;
+      s = THREE.MathUtils.lerp(introPose.s, s, k);
+    }
+    s *= pilotScroll.appear;
+
+    // Front light for the loading intro (the black loading screen needs more light on the pilot).
+    if (introLight.current) introLight.current.intensity = 2.6 * (1 - THREE.MathUtils.smoothstep(intro, 0, 0.6)) * pilotScroll.appear;
+
     const underChute = chuteOpen > 0;
     // Legs: a small idle swing, a bigger dangle under the parachute.
     LEGS.uKick.value = THREE.MathUtils.damp(LEGS.uKick.value, underChute ? 0.38 : 0.14, 3, delta);
@@ -234,8 +303,9 @@ function Pilot() {
     g.position.x = THREE.MathUtils.damp(g.position.x, x, 6, delta);
     const bob = Math.sin(t * 1.1) * 0.03;
     g.position.y = THREE.MathUtils.damp(g.position.y, y + bob, 6, delta);
-    const sc = THREE.MathUtils.damp(g.scale.x, s, 6, delta);
-    g.scale.setScalar(sc);
+    // During the intro the scale follows the loading screen's pop exactly (no easing lag).
+    const sc = intro < 1 ? s : THREE.MathUtils.damp(g.scale.x, s, 6, delta);
+    g.scale.setScalar(Math.max(sc, 1e-4));
     const m = motion.current;
     const vx = (g.position.x - prevX) / Math.max(delta, 1e-3);
     m.vx = THREE.MathUtils.damp(m.vx, vx, 8, delta);
@@ -278,15 +348,24 @@ function Pilot() {
     const spin = ease(clamp01((pilotScroll.statement - 0.1) / 0.4)) * Math.PI * 2 * (1 - b);
     // The pointer only nudges the gaze outside the hero, so the pilot keeps looking at the content.
     const pointerWeight = THREE.MathUtils.lerp(0.08, 0.3, inHero);
-    const targetY = restYaw + travelYaw + spin + turn + state.pointer.x * pointerWeight;
+    let targetY = restYaw + travelYaw + spin + turn + state.pointer.x * pointerWeight;
+    // Intro: face the viewer and wiggle hello, then hand over to the hero's three-quarter pose.
+    if (intro < 1) targetY = THREE.MathUtils.lerp(Math.sin(t * 4.2) * 0.22 * greet, targetY, ease(intro)) + introTurn;
     // On the crash chart, lean in a little toward the chart below.
     const lookDown = b * (1 - launch) * (1 - chuteOpen) * 0.16;
     const targetX = -state.pointer.y * pointerWeight * 0.4 + lookDown;
-    m.yaw = THREE.MathUtils.damp(m.yaw, targetY, 4, delta);
+    // During the intro the yaw follows the timeline exactly, so the model swap lands on the back view.
+    // On the first frame after it, drop the intro's full turn (2 pi) so the pilot does not spin back.
+    if (intro >= 1 && !m.handedOver) {
+      m.handedOver = true;
+      const d = m.yaw - targetY;
+      m.yaw = targetY + Math.atan2(Math.sin(d), Math.cos(d));
+    }
+    m.yaw = intro < 1 ? targetY : THREE.MathUtils.damp(m.yaw, targetY, 4, delta);
     g.rotation.y = m.yaw + u.rotY;
     g.rotation.x = THREE.MathUtils.damp(g.rotation.x, targetX + u.rotX, 4, delta);
     // Launch: lean up and to the left, along the thrust.
-    g.rotation.z = m.roll + Math.sin(t * 0.8) * 0.02 + (underChute ? 0 : launch * 0.45) + sway;
+    g.rotation.z = m.roll + Math.sin(t * 0.8) * 0.02 + (underChute ? 0 : launch * 0.45) + sway + Math.sin(t * 5.2) * 0.07 * greet;
 
     if (flames.current) {
       // Rockets burn out once the parachute is out.
@@ -330,8 +409,15 @@ function Pilot() {
   };
 
   return (
+    <>
+    <directionalLight ref={introLight} position={[0, 0.6, 4]} intensity={0} />
     <group ref={group}>
-      <primitive object={model} />
+      <group ref={mainRef}>
+        <primitive object={model} />
+      </group>
+      <group ref={waveRef}>
+        <primitive object={waveModel} />
+      </group>
       {/* Invisible grab handle around the pilot and seat. Only this is hit-tested, not the full model. */}
       <mesh
         onPointerDown={onPointerDown}
@@ -354,6 +440,7 @@ function Pilot() {
         <Parachute />
       </group>
     </group>
+    </>
   );
 }
 
@@ -394,6 +481,31 @@ vec3 headShake(vec3 p0, vec3 v, bool isNormal) {
   vec3 pivot = isNormal ? vec3(0.0) : vec3(0.0, 0.1, -0.02);
   vec3 q = v - pivot;
   q = vec3(c * q.x + s * q.z, q.y, -s * q.x + c * q.z);
+  return q + pivot;
+}
+`;
+
+/**
+ * Wave for the waving model (object space of ejecto-pilot-wave.glb): the raised right forearm and glove sit
+ * at negative x beside the helmet. They rotate in the screen plane around the elbow. Points close to the
+ * helmet center are excluded, and the weight ramps up from the elbow so the sleeve bends smoothly.
+ */
+const HAND_WAVE_GLSL = /* glsl */ `
+uniform float uTime;
+vec3 handWave(vec3 p0, vec3 v, bool isNormal) {
+  vec3 helmet = vec3(-0.02, 0.29, 0.0);
+  float w = (1.0 - smoothstep(-0.15, -0.11, p0.x))
+          * smoothstep(-0.07, 0.05, p0.y)
+          * smoothstep(0.195, 0.215, length(p0 - helmet));
+  if (w <= 0.0) return v;
+  // Positive angles move the glove away from the helmet. The fingers touch the visor in the source pose,
+  // so the arm keeps a small outward lean even at the end of the swing and never comes back into it.
+  float ang = (0.45 + 0.55 * (0.5 + 0.5 * sin(uTime * 7.0))) * 0.42 * w;
+  float c = cos(ang);
+  float s = sin(ang);
+  vec3 pivot = isNormal ? vec3(0.0) : vec3(-0.19, -0.06, 0.12);
+  vec3 q = v - pivot;
+  q = vec3(c * q.x - s * q.y, s * q.x + c * q.y, q.z);
   return q + pivot;
 }
 `;

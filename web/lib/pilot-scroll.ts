@@ -7,6 +7,10 @@ import sim from "@/data/sim-example.json";
  * Written by ScrollTrigger callbacks and read every frame, so it never re-renders React.
  */
 export const pilotScroll = {
+  // Loading intro, driven by the loading screen: appear 0 = hidden, 1 = shown (center stage);
+  // intro 0 = centered greeting pose, 1 = handed over to the normal scroll choreography.
+  appear: 0,
+  intro: 0,
   hero: 0, // 0 at the top of the page, 1 when the hero has scrolled away
   statement: 0, // progress through the statement section
   toCrash: 0, // 0 when the crash section enters the viewport, 1 when it pins

@@ -2,96 +2,116 @@
 
 import { useEffect, useRef, useState } from "react";
 import { gsap, prefersReducedMotion } from "@/lib/gsap";
+import { loadSignal } from "@/lib/load-signal";
+import { pilotScroll } from "@/lib/pilot-scroll";
 
-const CHECKS: Array<[string, string]> = [
-  ["SEAT", "ARMED"],
-  ["EJECTO FUND", "ARMED"],
-  ["PARAMETERS", "LOCKED"],
-  ["ADMIN KEYS", "NONE"],
+const MIN_BAR_MS = 700; // let the bar be seen even when the model is cached
+const MAX_MS = 10000; // never block the page, even if WebGL fails
+
+const STEPS: Array<[number, string]> = [
+  [0, "Strapping in"],
+  [35, "Arming the seat"],
+  [70, "Checking the fund"],
+  [100, "Ready to fly"],
 ];
 
-const SEEN_KEY = "ejecto-preflight-seen";
-
-/** Cockpit pre-flight check. Runs once per browser session and can be skipped. */
+/**
+ * Loading screen. While the 3D pilot downloads it shows the real progress. Once the model is ready the
+ * pilot itself pops up in the middle (its layer sits above this screen during the intro), says hi,
+ * then this screen fades out and the same pilot glides into its hero pose.
+ */
 export function Preloader() {
-  const [show, setShow] = useState(true);
   const root = useRef<HTMLDivElement>(null);
-  const tl = useRef<gsap.core.Timeline | null>(null);
+  const bar = useRef<HTMLDivElement>(null);
+  const bubble = useRef<HTMLDivElement>(null);
+  const [pct, setPct] = useState(0);
+  const [gone, setGone] = useState(false);
 
   useEffect(() => {
-    let seen = false;
-    try {
-      seen = sessionStorage.getItem(SEEN_KEY) === "1";
-    } catch {
-      /* storage blocked: just play it */
-    }
     const el = root.current;
+    const html = document.documentElement;
+    const handOver = () => {
+      pilotScroll.appear = 1;
+      pilotScroll.intro = 1;
+      delete html.dataset.intro;
+      html.style.overflow = "";
+    };
     if (!el) return;
-    if (seen || prefersReducedMotion()) {
+    if (prefersReducedMotion()) {
+      handOver();
       el.style.display = "none";
       return;
     }
-    document.documentElement.style.overflow = "hidden";
 
-    const ctx = gsap.context(() => {
-      const t = gsap.timeline({
-        onComplete: () => {
-          try {
-            sessionStorage.setItem(SEEN_KEY, "1");
-          } catch {
-            /* ignore */
-          }
-          document.documentElement.style.overflow = "";
-          setShow(false);
-        },
-      });
-      t.from(".pf-line", { opacity: 0, x: -12, duration: 0.18, stagger: 0.16, ease: "power2.out" })
-        .from(".pf-state", { opacity: 0, duration: 0.01, stagger: 0.16 }, 0.12)
-        .from(".pf-title", { opacity: 0, scale: 1.08, duration: 0.25, ease: "power3.out" }, "+=0.1")
-        .to(".pf-title", { opacity: 1, duration: 0.45 })
-        .to(el, { yPercent: -100, duration: 0.7, ease: "power4.inOut" });
-      tl.current = t;
-    }, el);
+    pilotScroll.appear = 0;
+    pilotScroll.intro = 0;
+    html.dataset.intro = "on";
+    html.style.overflow = "hidden";
+    const start = performance.now();
+    let started = false;
+    let tl: gsap.core.Timeline | null = null;
+
+    const finish = () => {
+      handOver();
+      setGone(true);
+    };
+
+    const playIntro = () => {
+      if (started) return;
+      started = true;
+      tl = gsap.timeline({ onComplete: finish });
+      tl.to(bar.current, { opacity: 0, y: 12, duration: 0.35, ease: "power2.in" })
+        .to(pilotScroll, { appear: 1, duration: 0.9, ease: "back.out(1.8)" }, "-=0.1")
+        .fromTo(bubble.current, { opacity: 0, scale: 0.4, rotate: -12 }, { opacity: 1, scale: 1, rotate: -4, duration: 0.5, ease: "back.out(2.2)" }, "-=0.45")
+        .to({}, { duration: 1.3 })
+        .to(bubble.current, { opacity: 0, scale: 0.8, duration: 0.25, ease: "power2.in" })
+        .to(el, { opacity: 0, duration: 0.7, ease: "power2.out" }, "<")
+        .to(pilotScroll, { intro: 1, duration: 1.6, ease: "power2.inOut" }, "<");
+    };
+
+    const check = () => {
+      const s = loadSignal.get();
+      setPct(Math.round(s.ready ? 100 : s.progress));
+      if (s.ready && performance.now() - start >= MIN_BAR_MS) playIntro();
+    };
+    const unsubscribe = loadSignal.subscribe(check);
+    const timer = window.setInterval(check, 120);
+    // If the model never arrives, skip the greeting and just reveal the page.
+    const fallback = window.setTimeout(() => {
+      if (started) return;
+      started = true;
+      gsap.to(el, { opacity: 0, duration: 0.5, onComplete: finish });
+    }, MAX_MS);
 
     return () => {
-      ctx.revert();
-      document.documentElement.style.overflow = "";
+      unsubscribe();
+      window.clearInterval(timer);
+      window.clearTimeout(fallback);
+      tl?.kill();
+      handOver();
     };
   }, []);
 
-  if (!show) return null;
+  if (gone) return null;
+  const status = [...STEPS].reverse().find(([at]) => pct >= at)?.[1] ?? STEPS[0][1];
 
   return (
-    <div
-      ref={root}
-      className="fixed inset-0 z-[100] flex flex-col justify-between bg-ink p-6 sm:p-10"
-      onClick={() => tl.current?.progress(1)}
-      role="status"
-      aria-label="Loading Ejecto"
-    >
-      <div className="label flex justify-between text-muted">
-        <span>Ejecto pre-flight check</span>
-        <button type="button" className="text-bone underline-offset-4 hover:underline" onClick={() => tl.current?.progress(1)}>
-          Skip
-        </button>
+    <div ref={root} className="fixed inset-0 z-[100] bg-ink" role="status" aria-label="Loading Ejecto">
+      {/* Greeting bubble, next to where the 3D pilot pops up. */}
+      <div ref={bubble} className="absolute left-1/2 top-[13%] origin-bottom-left translate-x-[8vh] opacity-0 sm:translate-x-[14vh]">
+        <div className="display whitespace-nowrap rounded-2xl bg-hazard px-5 py-3 text-lg text-ink sm:text-2xl">Hi! Strap in.</div>
+        <div className="ml-6 h-0 w-0 border-x-[12px] border-t-[14px] border-x-transparent border-t-hazard" />
       </div>
 
-      <div className="flex flex-col items-center gap-10">
-        <ul className="w-full max-w-md space-y-2 font-mono text-sm sm:text-base">
-          {CHECKS.map(([name, state]) => (
-            <li key={name} className="pf-line flex items-baseline gap-2">
-              <span className="text-muted">{name}</span>
-              <span className="flex-1 overflow-hidden whitespace-nowrap text-line">{".".repeat(60)}</span>
-              <span className={`pf-state font-bold ${state === "NONE" ? "text-hazard" : "text-hud"}`}>{state}</span>
-            </li>
-          ))}
-        </ul>
-        <h1 className="pf-title glitch display text-[18vw] text-bone sm:text-[12vw]" data-text="EJECTO">
-          EJECTO
-        </h1>
+      <div ref={bar} className="absolute left-1/2 top-1/2 w-[min(82vw,360px)] -translate-x-1/2 -translate-y-1/2">
+        <div className="label flex items-center justify-between">
+          <span className="text-muted">{status}</span>
+          <span className="tabular-nums text-bone">{pct}%</span>
+        </div>
+        <div className="mt-3 h-3 overflow-hidden bg-line">
+          <div className="hazard-stripes-thin h-full transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
+        </div>
       </div>
-
-      <div className="hazard-stripes h-3 w-full opacity-80" />
     </div>
   );
 }

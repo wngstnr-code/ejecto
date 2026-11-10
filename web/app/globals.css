@@ -140,6 +140,11 @@
   }
 }
 
+/* While the loading intro plays, the 3D pilot layer sits above the loading screen. */
+html[data-intro="on"] .pilot-layer {
+  z-index: 110;
+}
+
 /* Glitch title: two offset copies, sliced with clip-path. */
 .glitch {
   position: relative;
