@@ -75,6 +75,24 @@ class Market {
     let nb = h.basis - proceeds; if (h.bal <= 1e-9) { h.bal = 0; nb = 0; h.w = 0; } // left the ship: forfeit
     this.setBasis(h, nb); return proceeds;
   }
+  // Mayday rescue (coin code v2): all pledges fill as one buy at one batch price.
+  // coinvest: the Ejecto Fund adds `coinvest` x the pledges (at most half of the fund) to the batch.
+  rescueBuy(pledges, t, day, bonusDays = 0, coinvest = 0) {
+    if (this.ejected) return 0;
+    const T = [...pledges.values()].reduce((a, x) => a + x, 0);
+    const feeRate = FB + 0.005;
+    const C = Math.min(coinvest * T, this.fund / 2);
+    this.fund += T * FB - C; this.protocol += T * 0.005;
+    const net = T * (1 - feeRate) + C;
+    const d = tokensForNet(this.s, net); this.s += d; this.reserve += net;
+    for (const [id, x] of pledges) {
+      const h = this.holder(id); this.touch(h, t);
+      h.bal += d * x / T; h.cash -= x; this.setBasis(h, h.basis + x);
+      // Optional rescuer bonus: the rescue basis earns weight as if held for `bonusDays` already.
+      if (bonusDays > 0) { const bw = x * bonusDays; h.w += bw; this.W += bw; }
+    }
+    this.buys[day] += T; this.totalBuy += T; return d;
+  }
   windowBuys(day) { let v = 0; for (let d = Math.max(0, day - WINDOW + 1); d <= day; d++) v += this.buys[d]; return v; }
   windowNet(day) { let v = 0; for (let d = Math.max(0, day - WINDOW + 1); d <= day; d++) v += this.buys[d] - this.sells[d]; return Math.max(0, v); }
   updPeak(day) { this.peakWin = Math.max(this.peakWin, PEAK_RULE === 'net' ? this.windowNet(day) : this.windowBuys(day)); }
@@ -101,9 +119,14 @@ class Market {
 
 // opts.weighting: fund weighting at EJECT. opts.grief: { day, x, hold } an attacker buys x NEAR on `day`
 // and sells it all `hold` days later (0 = the same day), to inflate the peak window.
+// opts.mayday (coin code v2, spec section 10): { pledgeProb, pledgeFrac, targetMult, newcomers }.
+// When the coin becomes ejectable, holders still aboard pledge with probability pledgeProb a share
+// pledgeFrac of what they put in; the target is targetMult x the alive line. Success executes one batch
+// buy; `newcomers` new buyers then arrive over the next 7 days (0 = no new demand, the pessimistic case).
 export function run(seed, mode, opts = {}) {
   const agents = makeAgents(seed); const m = new Market(mode); const series = [];
   const entry = new Map(); let snapBeforeEject = null;
+  const md = opts.mayday && mode === 'ejecto' ? { ...opts.mayday, blockUntil: -1, cooldownUntil: -1, rescues: 0, fails: 0, pledgers: new Set(), lockedUntil: new Map(), r: mulberry32(seed * 7919 + 13) } : null;
   for (let day = 0; day < DAYS; day++) {
     m.curDay = day;
     const g = opts.grief, G = 777777;
@@ -115,16 +138,31 @@ export function run(seed, mode, opts = {}) {
       if (a.day === day && !m.ejected) { m.buy(a.id, a.amt, t, day); entry.set(a.id, price(m.s)); continue; }
       const h = m.h.get(a.id); if (!h || h.bal <= 0 || m.ejected) continue;
       const p = price(m.s), e = entry.get(a.id);
+      if (md && (md.lockedUntil.get(a.id) ?? -1) > day) continue; // rescue tokens are locked
       if (p >= e * a.tp || (a.sl && p <= e * a.sl) || a.bored[day] < 0.02) m.sell(a.id, h.bal, t);
     }
     m.updPeak(day);
-    if (m.canEject(day)) { snapBeforeEject = m.clone(); m.eject(day, opts.weighting || 'time'); }
+    if (md && !m.ejected && day > md.blockUntil && day >= md.cooldownUntil && m.canEject(day)) {
+      // Mayday: decide the pledges, then either rescue (one batch buy) or fail (3 days blocked, cooldown 7).
+      const threshold = Math.max(ALIVE_MIN, ALIVE_FRAC * m.peakWin), target = md.targetMult * threshold;
+      const pledges = new Map();
+      for (const a of agents) { if (a.id === 888888) continue; const h = m.h.get(a.id); if (h && h.bal > 0 && md.r() < md.pledgeProb) pledges.set(a.id, a.amt * md.pledgeFrac); }
+      // Optional attacker: pledges `attacker` NEAR to every Mayday and sells as soon as it can (rescue and dump).
+      if (md.attacker) { if (!agents.some((a) => a.id === 888888)) agents.push({ id: 888888, day: 9999, amt: md.attacker, tp: 1.0, sl: 0, bored: Array(DAYS).fill(1), order: 0 }); pledges.set(888888, md.attacker); }
+      const total = [...pledges.values()].reduce((x, y) => x + y, 0);
+      if (total >= target) {
+        m.rescueBuy(pledges, day + 0.5, day, md.bonusDays ?? 0, md.coinvest ?? 0); m.updPeak(day); md.rescues++;
+        for (const id of pledges.keys()) { md.pledgers.add(id); entry.set(id, price(m.s)); if (md.lockDays) md.lockedUntil.set(id, day + md.lockDays); }
+        for (let k = 0; k < md.newcomers; k++) { const id = 1000 + md.rescues * 100 + k; agents.push({ id, day: Math.min(DAYS - 1, day + 1 + Math.floor(md.r() * 7)), amt: Math.min(50, Math.exp(Math.log(2) + gauss(md.r) * 1.0)), tp: 1.3 + md.r() * 2.7, sl: md.r() < 0.5 ? 0.3 + md.r() * 0.4 : 0, bored: Array.from({ length: DAYS }, () => md.r()), order: md.r() }); }
+      } else { md.fails++; md.blockUntil = day + 2; md.cooldownUntil = day + 3 + 7; }
+    }
+    if (m.canEject(day) && !(md && day <= md.blockUntil)) { snapBeforeEject = m.clone(); m.eject(day, opts.weighting || 'time'); }
     series.push({ day, price: price(m.s), reserve: m.reserve, fund: m.fund, holders: [...m.h.values()].filter(h => h.bal > 0).length, windowBuys: m.windowBuys(day), threshold: Math.max(ALIVE_MIN, ALIVE_FRAC * m.peakWin) });
   }
   if (mode === 'baseline') m.raceExit(agents, DAYS + 1);
   if (mode === 'ejecto' && !m.ejected) { m.eject(DAYS, opts.weighting || 'time'); } // end of sim: settle remaining
   const pnl = agents.filter(a => m.h.has(a.id)).map(a => ({ id: a.id, pnl: m.h.get(a.id).cash, inv: a.amt }));
-  return { m, pnl, series, snapBeforeEject, agents };
+  return { m, pnl, series, snapBeforeEject, agents, mayday: md };
 }
 
 export function stats(pnl) {
