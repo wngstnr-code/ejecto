@@ -95,7 +95,23 @@ cd contracts/coin && cargo near build non-reproducible-wasm
 cd contracts/factory && cargo near build non-reproducible-wasm
 ```
 
-The wasm output path is printed by cargo-near (usually `target/near/<crate>.wasm`). Use `reproducible-wasm` for the final submission build if time allows.
+The wasm output path is printed by cargo-near (usually `target/near/<crate>.wasm`).
+
+### Reproducible build (used for the deployed, verified contracts)
+
+```bash
+# needs Docker. On Apple silicon: Colima with Rosetta (softwareupdate --install-rosetta), the image is amd64 only.
+# Colima only shares $HOME with the VM, so point TMPDIR there. The git tree must be clean and pushed.
+export TMPDIR=$HOME/.cache/cargo-near-tmp
+cd contracts/coin && cargo near build reproducible-wasm
+cd contracts/factory && cargo near build reproducible-wasm
+```
+
+The image and digest are pinned in `[package.metadata.near.reproducible_build]` of each crate. The build embeds NEP-330 `build_info` (image, repo commit, contract path), which `contract_source_metadata` returns. With Rosetta both builds take about 5 minutes; under QEMU emulation they are very slow and can crash.
+
+### Verify on NearBlocks
+
+Open `https://testnet.nearblocks.io/verify-contract?account=<account>`, check the prefilled form (verifier `v2-verifier.sourcescan.testnet`) and press Verify Contract. Do it for the factory and for each coin account (all coins share the same code).
 
 ### Test
 
