@@ -205,4 +205,4 @@ Fails if any tracked text file contains an em dash (U+2014) or an en dash (U+201
 
 ## 7. Public RPC
 
-Testnet RPC: `https://rpc.testnet.near.org` (or another provider from https://docs.near.org/api/rpc/providers). The MPC and other public endpoints are not needed for Ejecto.
+Testnet RPC: `https://rpc.testnet.near.org` for the CLI. The web app uses `https://test.rpc.fastnear.com` (`NEXT_PUBLIC_RPC_URL`), which answered view calls about 10x faster in our tests (or pick another provider from https://docs.near.org/api/rpc/providers). The MPC and other public endpoints are not needed for Ejecto.

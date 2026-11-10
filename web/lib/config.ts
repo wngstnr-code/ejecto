@@ -1,6 +1,6 @@
 // Public, non-secret settings. They come from the root .env (NEXT_PUBLIC_ prefix only).
 export const NETWORK = process.env.NEXT_PUBLIC_NETWORK ?? "testnet";
-export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? "https://rpc.testnet.near.org";
+export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? "https://test.rpc.fastnear.com";
 export const FACTORY_ID = process.env.NEXT_PUBLIC_FACTORY_ID ?? "factory.ejecto.testnet";
 export const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 /** Public URL of the deployed site, used for absolute social image links. */
