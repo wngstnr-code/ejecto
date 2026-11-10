@@ -365,3 +365,122 @@ async fn excess_launch_deposit_comes_back() -> anyhow::Result<()> {
     );
     Ok(())
 }
+
+/// Waits (fast-forwarding blocks) until `pred(status)` holds.
+async fn wait_until(env: &Env, a: &Account, coin: &AccountId, what: &str, pred: impl Fn(&Value) -> bool) -> anyhow::Result<Value> {
+    for _ in 0..80 {
+        let s = status(a, coin).await?;
+        if pred(&s) {
+            return Ok(s);
+        }
+        env.worker.fast_forward(20).await?;
+    }
+    anyhow::bail!("timed out waiting for {what}")
+}
+
+#[tokio::test]
+async fn mayday_rescue_with_ten_pledgers_and_fund_coinvest() -> anyhow::Result<()> {
+    let env = setup().await?;
+    let creator = user(&env, "creator", 10).await?;
+    assert!(launch(&env, &creator, "mayday").await?.is_success());
+    let coin: AccountId = format!("mayday.{}", env.factory.id()).parse()?;
+
+    // a small crew, under the 1 NEAR alive line, so the coin dies after 14 demo days
+    let crew = user(&env, "crew", 5).await?;
+    let b = register_and_buy(&crew, &coin, 0).await?;
+    assert!(b.is_failure(), "a 0 NEAR buy must fail");
+    let crew_buy = crew
+        .batch(&coin)
+        .call(Function::new("storage_deposit").args_json(json!({})).deposit(NearToken::from_millinear(100)).gas(Gas::from_tgas(20)))
+        .call(Function::new("buy").args_json(json!({})).deposit(NearToken::from_millinear(600)).gas(Gas::from_tgas(100)))
+        .transact()
+        .await?;
+    assert!(crew_buy.is_success(), "crew buy failed: {crew_buy:?}");
+    let s = wait_until(&env, &crew, &coin, "ejectable", |s| s["ejectable"].as_bool() == Some(true)).await?;
+    let line = u128_of(&s["alive_threshold"]);
+    assert_eq!(s["can_mayday"], json!(true));
+
+    // ten pledgers register; the opener stakes 10% of a 2x-line target
+    let mut pledgers = vec![];
+    for i in 0..10 {
+        let p = user(&env, &format!("p{i}"), 3).await?;
+        let bounds: Value = p.view(&coin, "storage_balance_bounds").await?.json()?;
+        p.call(&coin, "storage_deposit")
+            .args_json(json!({}))
+            .deposit(NearToken::from_yoctonear(u128_of(&bounds["min"])))
+            .transact()
+            .await?
+            .into_result()?;
+        pledgers.push(p);
+    }
+    let target = 2 * line;
+    let open = pledgers[0]
+        .call(&coin, "mayday")
+        .args_json(json!({ "target": target.to_string() }))
+        .deposit(NearToken::from_yoctonear(target / 10))
+        .gas(Gas::from_tgas(100))
+        .transact()
+        .await?;
+    assert!(open.is_success(), "mayday failed: {open:?}");
+    println!("GAS mayday: {:.1} Tgas", tgas(&open));
+    let s = status(&crew, &coin).await?;
+    assert_eq!(s["ejectable"], json!(false), "EJECT is blocked while the Mayday is open");
+    let blocked = crew.call(&coin, "eject").gas(Gas::from_tgas(100)).transact().await?;
+    assert!(blocked.is_failure(), "eject must fail during a Mayday");
+
+    // nine more pledges, each 1/10 of the rest; the last one reaches the target and rescues
+    let each = (target - target / 10) / 9 + 1;
+    let fund_before = u128_of(&s["fund"]);
+    for (i, p) in pledgers.iter().enumerate().skip(1) {
+        let r = p.call(&coin, "pledge").deposit(NearToken::from_yoctonear(each)).gas(Gas::from_tgas(100)).transact().await?;
+        assert!(r.is_success(), "pledge {i} failed: {r:?}");
+        if i == 9 {
+            println!("GAS last pledge + rescue: {:.1} Tgas", tgas(&r));
+        }
+    }
+    let s = status(&crew, &coin).await?;
+    assert_eq!(s["rescues"], json!(1));
+    assert!(s["mayday"].is_null());
+    assert_eq!(s["ejectable"], json!(false), "the rescue counts as a buy: the coin is alive");
+    assert!(u128_of(&s["fund"]) < fund_before + target, "the fund co-invested part of the rescue");
+
+    // everyone collects; the escrow (the coin account) ends empty
+    let mut got = 0u128;
+    for p in &pledgers {
+        let c = p.call(&coin, "collect").gas(Gas::from_tgas(100)).transact().await?;
+        assert!(c.is_success(), "collect failed: {c:?}");
+        got += u128_of(&p.view(&coin, "ft_balance_of").args_json(json!({ "account_id": p.id() })).await?.json::<Value>()?);
+    }
+    let escrow = u128_of(&crew.view(&coin, "ft_balance_of").args_json(json!({ "account_id": coin })).await?.json::<Value>()?);
+    assert_eq!(escrow, 0, "the escrow must be empty");
+    assert!(got > 0);
+    let round: Value = crew.view(&coin, "get_round").args_json(json!({ "round": 1 })).await?.json()?;
+    assert_eq!(round["rescued"], json!(true));
+    assert_eq!(u128_of(&round["pledges_left"]), 0);
+
+    // the coin still has no access keys
+    let keys = env.worker.view_access_keys(&coin).await?;
+    assert!(keys.is_empty(), "coin must stay keyless");
+    Ok(())
+}
+
+#[tokio::test]
+async fn frozen_factory_rejects_new_code_but_still_launches() -> anyhow::Result<()> {
+    let env = setup().await?;
+    let f = env.owner.call(env.factory.id(), "freeze").transact().await?;
+    assert!(f.is_success(), "freeze failed: {f:?}");
+    let cfg: Value = env.factory.view("get_config").await?.json()?;
+    assert_eq!(cfg["frozen"], json!(true));
+    let again = env
+        .owner
+        .call(env.factory.id(), "set_coin_code")
+        .args(read(COIN_WASM))
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(again.is_failure(), "set_coin_code must fail after freeze");
+    let creator = user(&env, "creator", 10).await?;
+    assert!(launch(&env, &creator, "frozen1").await?.is_success(), "launches keep working");
+    let _ = &env.fees;
+    Ok(())
+}
