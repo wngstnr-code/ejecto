@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { REPO_URL } from "@/lib/config";
 import { Logo } from "./logo";
 
 const NAV = [
@@ -36,9 +35,6 @@ export function SiteHeader() {
               {n.label}
             </a>
           ))}
-          <a href={REPO_URL} target="_blank" rel="noreferrer" className="label text-muted transition-colors hover:text-bone">
-            GitHub
-          </a>
         </nav>
         <Link
           href="/coins/"
