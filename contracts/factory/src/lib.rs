@@ -56,6 +56,8 @@ pub struct Config {
     pub coin_code_hash: Option<String>,
     pub launch_deposit: U128,
     pub coins: u32,
+    /// True once `freeze` was called: the coin code is final.
+    pub frozen: bool,
 }
 
 #[near(contract_state)]
@@ -70,18 +72,8 @@ pub struct Factory {
     by_symbol: LookupMap<String, u32>,
     /// Deposits of failed launches, withdrawn by the creator with `withdraw_refund`.
     pending_refunds: LookupMap<AccountId, u128>,
-}
-
-/// State layout before `pending_refunds` existed (deployed on testnet 2026-11-09).
-#[near(serializers = [borsh])]
-struct FactoryV1 {
-    owner: AccountId,
-    protocol_account: AccountId,
-    coin_code: LazyOption<Vec<u8>>,
-    coin_code_len: u64,
-    coin_code_hash: Option<String>,
-    coins: Vector<CoinInfo>,
-    by_symbol: LookupMap<String, u32>,
+    /// Set once by `freeze`: the coin code can never change again.
+    frozen: bool,
 }
 
 fn valid_symbol(symbol: &str) -> bool {
@@ -108,29 +100,35 @@ impl Factory {
             coins: Vector::new(StorageKey::Coins),
             by_symbol: LookupMap::new(StorageKey::BySymbol),
             pending_refunds: LookupMap::new(StorageKey::PendingRefunds),
+            frozen: false,
         }
     }
 
-    /// One-time state migration from `FactoryV1`. Only the factory account itself can call it.
-    #[private]
-    #[init(ignore_state)]
-    pub fn migrate() -> Self {
-        let old: FactoryV1 = env::state_read().unwrap_or_else(|| env::panic_str("No v1 state"));
-        Self {
-            owner: old.owner,
-            protocol_account: old.protocol_account,
-            coin_code: old.coin_code,
-            coin_code_len: old.coin_code_len,
-            coin_code_hash: old.coin_code_hash,
-            coins: old.coins,
-            by_symbol: old.by_symbol,
-            pending_refunds: LookupMap::new(StorageKey::PendingRefunds),
-        }
+    /// Locks the coin code forever: after this, `set_coin_code` always fails and nobody, the owner
+    /// included, can change what new coins run. Owner only, and only once a code is set.
+    pub fn freeze(&mut self) {
+        require!(
+            env::predecessor_account_id() == self.owner,
+            "Only the owner can freeze the factory"
+        );
+        require!(!self.frozen, "The factory is already frozen");
+        require!(self.coin_code_hash.is_some(), "Set the coin code before freezing");
+        self.frozen = true;
+        env::log_str(&format!(
+            "EVENT_JSON:{}",
+            json!({
+                "standard": "ejecto",
+                "version": "1.1.0",
+                "event": "ejecto_factory_frozen",
+                "data": [{ "coin_code_hash": self.coin_code_hash }],
+            })
+        ));
     }
 
     /// Stores the coin wasm used for future launches. Owner only.
     /// The raw wasm bytes are the call input (near-cli `file-args`), not JSON.
     pub fn set_coin_code(&mut self) {
+        require!(!self.frozen, "The factory is frozen: the coin code can never change");
         require!(
             env::predecessor_account_id() == self.owner,
             "Only the owner can set the coin code"
@@ -315,6 +313,7 @@ impl Factory {
             coin_code_hash: self.coin_code_hash.clone(),
             launch_deposit: self.launch_deposit(),
             coins: self.coins.len(),
+            frozen: self.frozen,
         }
     }
 
@@ -364,6 +363,37 @@ mod tests {
         let mut w = b"\0asm\x01\0\0\0".to_vec();
         w.extend(vec![7u8; 1000]);
         w
+    }
+
+    #[test]
+    fn freeze_locks_the_coin_code_forever() {
+        let mut f = setup();
+        ctx("ejecto.testnet", 0, fake_wasm());
+        f.set_coin_code();
+        ctx("ejecto.testnet", 0, vec![]);
+        f.freeze();
+        assert!(f.get_config().frozen);
+        ctx("ejecto.testnet", 0, fake_wasm());
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| f.set_coin_code()));
+        assert!(r.is_err(), "set_coin_code must fail after freeze");
+    }
+
+    #[test]
+    #[should_panic(expected = "Only the owner can freeze the factory")]
+    fn only_the_owner_can_freeze() {
+        let mut f = setup();
+        ctx("ejecto.testnet", 0, fake_wasm());
+        f.set_coin_code();
+        ctx("mallory.testnet", 0, vec![]);
+        f.freeze();
+    }
+
+    #[test]
+    #[should_panic(expected = "Set the coin code before freezing")]
+    fn freeze_needs_a_coin_code() {
+        let mut f = setup();
+        ctx("ejecto.testnet", 0, vec![]);
+        f.freeze();
     }
 
     #[test]
