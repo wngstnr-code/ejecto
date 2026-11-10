@@ -76,7 +76,7 @@ Done when: a judge can open the hosted page, connect a testnet wallet, and run t
 
 | Priority | Item | Why |
 |---|---|---|
-| 1 | SOS rescue (spec section 10) | Strengthens the Social track fit |
+| 1 | SOS rescue, later called Mayday (spec section 10) | Built as coin code v2 with fund co-invest (D-038), after a first rejection (D-037) |
 | 2 | "Coin graveyard" page (ejected coins and how much was rescued) | Strong demo and social proof |
 | 3 | Buy from other chains through NEAR Intents 1Click | Shows chain abstraction |
 | 4 | Global contracts to cut the launch deposit | Cost optimization |
