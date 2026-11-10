@@ -1,6 +1,6 @@
 "use client";
 
-import { explorerAccount, FACTORY_ID, REPO_URL } from "@/lib/config";
+import { explorerAccount, FACTORY_ID } from "@/lib/config";
 import { useLiveStats } from "@/lib/use-live-stats";
 import { Reveal } from "./reveal";
 
@@ -31,7 +31,8 @@ export function Safeguards() {
       body: ready
         ? `Read live from all ${ready.coins} coin account${ready.coins === 1 ? "" : "s"}. Nobody can upgrade, drain or log in. Not even us.`
         : "Read live from every coin account on testnet.",
-      link: coin ? { href: explorerAccount(coin.account_id), label: `Check ${coin.symbol} on the explorer` } : undefined,
+      // Opens the coin's access key list on the explorer: it is empty.
+      link: coin ? { href: `${explorerAccount(coin.account_id)}/keys`, label: `See ${coin.symbol}'s keys: none` } : undefined,
     },
     {
       n: "02",
@@ -68,7 +69,8 @@ export function Safeguards() {
       live: true,
       title: "Code hash on chain",
       body: `Every coin runs the same code. Its sha256 is public in the ${FACTORY_ID} config.`,
-      link: { href: REPO_URL, label: "Read the source" },
+      // The explorer's contract tab shows "Contract Source Code Verified" and the source files.
+      link: { href: `${explorerAccount(FACTORY_ID)}/contract/code`, label: "See it verified" },
     },
   ];
 

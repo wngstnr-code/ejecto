@@ -8,7 +8,7 @@ Ejecto is a memecoin launchpad on NEAR where every coin has an ejection seat. Ea
 |---|---|
 | Live app (NEAR testnet) | https://ejecto.vercel.app |
 | Demo video | https://x.com/Dudung_gg/status/2120172645438374353 |
-| Factory contract (source verified) | [`factory.ejecto.testnet`](https://testnet.nearblocks.io/address/factory.ejecto.testnet?tab=contract) |
+| Factory contract (source verified) | [`factory.ejecto.testnet`](https://testnet.nearblocks.io/address/factory.ejecto.testnet/contract/code) |
 | Example coin, launched, ejected and claimed on video | [`pilot.factory.ejecto.testnet`](https://testnet.nearblocks.io/address/pilot.factory.ejecto.testnet) |
 | Tracks | Memecoins With Mechanics, Social Money |
 

@@ -126,6 +126,9 @@ const COIN_TONES = [
 const TICKS = Array.from({ length: 40 }, (_, i) => (i / 40) * Math.PI * 2);
 
 /** A minted-looking coin: reeded rim, inner ring, a shine and the symbol. The tone is fixed per symbol. */
+/** Rounded so server and browser render the same digits (avoids a hydration mismatch). */
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
 function CoinArt({ symbol, className }: { symbol: string; className: string }) {
   const tone = COIN_TONES[[...symbol].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % COIN_TONES.length];
   const label = symbol.replace(/[^a-z0-9]/gi, "").slice(0, 2).toUpperCase() || "?";
@@ -136,10 +139,10 @@ function CoinArt({ symbol, className }: { symbol: string; className: string }) {
       {TICKS.map((a) => (
         <line
           key={a}
-          x1={32 + Math.cos(a) * 26.6}
-          y1={32 + Math.sin(a) * 26.6}
-          x2={32 + Math.cos(a) * 29.3}
-          y2={32 + Math.sin(a) * 29.3}
+          x1={r2(32 + Math.cos(a) * 26.6)}
+          y1={r2(32 + Math.sin(a) * 26.6)}
+          x2={r2(32 + Math.cos(a) * 29.3)}
+          y2={r2(32 + Math.sin(a) * 29.3)}
           stroke="#0a0a0b"
           strokeOpacity="0.35"
           strokeWidth="1.1"
@@ -230,7 +233,7 @@ export function DemoBanner({ dayLength }: { dayLength: number }) {
       <div className="hazard-stripes absolute inset-y-0 left-0 w-10 sm:w-24" />
       <div className="hazard-stripes absolute inset-y-0 right-0 w-10 sm:w-24" />
       <p className="label relative py-2.5 text-center font-bold">
-        Demo time: 1 day = {dayLength} s. Real coins use 24 hours.
+        Demo time: 1 day = {dayLength} s<span className="hidden sm:inline">. Real coins use 24 hours.</span>
       </p>
     </div>
   );
