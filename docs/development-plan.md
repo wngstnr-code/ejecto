@@ -55,9 +55,9 @@ Done when: a coin launched on testnet has zero access keys (visible in an explor
 
 - [x] Next.js + Tailwind + TS scaffold (static export), RPC views
 - [x] Landing page with the 3D pilot, live chain stats and model charts
-- [ ] Wallet connection
-- [ ] Coins, Launch, Coin pages (engine meter, your seat, EJECT, claim, DEMO TIME banner)
-- [ ] Simulation page (static JSON and SVG from `sim/`)
+- [x] Wallet connection (NEAR Connect, D-027)
+- [x] Coins, Launch, Coin pages (engine meter, your seat, EJECT, claim, DEMO TIME banner). Built, not yet tested with a signed transaction.
+- [x] ~~Simulation page~~ cut (D-028): the landing shows the model data
 - [ ] Deploy to GitHub Pages
 
 Done when: a judge can open the hosted page, connect a testnet wallet, and run the full demo flow.

@@ -124,8 +124,8 @@ Measured in the sandbox (2026-11-09): `create_coin` 45.8 Tgas, `storage_deposit`
 
 - Next.js 16 (App Router) + Tailwind CSS 4 + TypeScript (D-022). `output: 'export'` builds plain static files into `web/out`, hosted on GitHub Pages with `basePath` set to the repo name. No server code: no API routes, no server actions, no middleware, no `next/image` optimization (`images.unoptimized`).
 - Every page that touches the wallet or RPC is a client component. The coin page is `/coin/?id=<coin account>` (query parameter, read with `useSearchParams` inside `Suspense`), because coins are created at runtime and static export cannot pre-render unknown dynamic routes.
-- Wallet connection: NEAR Wallet Selector (`@near-wallet-selector/*`). Check the current recommended package in docs.near.org before starting M4. `@hot-labs/near-connect` is the alternative.
-- RPC reads: small `fetch` JSON-RPC helpers in `web/lib/near.ts` (view calls and access key lists) to the public testnet RPC. `near-api-js` can still be added for signing if the wallet package needs it.
+- Wallet connection: NEAR Connect (`@hot-labs/near-connect`, D-027) in `web/lib/wallet.tsx`. The connector is created only in the browser. A first buy sends `storage_deposit` and `buy` as two function calls in one transaction.
+- RPC reads: small `fetch` JSON-RPC helpers in `web/lib/near.ts` (view calls, account balance, access key lists) to the public testnet RPC (`https://test.rpc.fastnear.com` by default). No `near-api-js`.
 - Config comes from the single root `.env`: `web/next.config.ts` calls `loadEnvConfig` from `@next/env` on the repo root. Only `NEXT_PUBLIC_` variables reach the browser: `NEXT_PUBLIC_NETWORK`, `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_FACTORY_ID`. No secrets.
 
 Pages:
@@ -133,12 +133,13 @@ Pages:
 | Page | Content |
 |---|---|
 | Landing `/` | Done (D-023 to D-025). Preloader, hero, "The problem" typewriter, "The crash" pinned chart (model data), "How it works" pinned card stack, "The math" ledger (model), "Safeguards" spec board (live chain reads), final call to action, footer. A fixed 3D pilot layer (`components/landing/pilot-stage.tsx`) follows the scroll through all sections. Lenis smooth scroll, GSAP ScrollTrigger, Motion, custom scrollbar. |
-| Coins `/coins/` | Coin list from the factory, status badge (alive, dying, ejectable, ejected), "Launch a coin" |
-| Launch | Form for the launch args, demo-time toggle, cost estimate |
-| Coin | Price, supply, reserve, Ejecto Fund, engine meter (`window_buys / alive_threshold`), "your seat" (balance, basis, weight, estimated claim), buy and sell with quotes, EJECT button, claim button, DEMO TIME banner |
-| Simulation | Results and charts from `sim/ejecto-sim.mjs` (static JSON and SVG, clearly labeled as a model) |
+| Coins `/coins/` | Live coin list from the factory in one table card: toolbar with Status and Clock filter dropdowns and an expand (full view) button, sortable columns (price, fund, engine, launched), phase badge (warming up, alive, dying, ejectable, ejected), a small engine bar, stat pills (flying, total in funds). Polls every 8 s. |
+| Launch `/launch/` | Form for `create_coin`: name, symbol with a live availability check, optional icon (resized in the browser to fit 2 KB), fee preset tiles, demo time or real days, live launch cost. After the launch it confirms the coin is registered and shows its access key count. |
+| Coin `/coin/?id=` | DEMO TIME banner, stats, engine meter (14-day buys against the alive line and peak), bonding curve drawn from the contract formula, buy and sell with `quote_buy`/`quote_sell` and 1% slippage, "your seat" (balance, basis, fund weight, payout if ejected now). When ejectable: the EJECT handle. After EJECT: claim panel and the eject record. Polls `status()` and `holder()` every 4 s. Only ids of the form `<symbol>.<factory>` are accepted. |
+| EJECT scene | After a successful EJECT the 3D pilot fires up, opens the canopy and drifts down (`components/app/eject-moment.tsx`, lazy chunk, preloaded once the coin is ejectable). Skipped with reduced motion. |
+| Simulation | Cut (D-028). The landing shows the model data. |
 
-The web app polls `status()` every few seconds. There is no websocket and no indexer.
+The app pages share a folded footer and the header with the wallet button. The web app polls `status()` every few seconds. There is no websocket and no indexer.
 
 ## 5. Simulation (`sim/ejecto-sim.mjs`)
 
