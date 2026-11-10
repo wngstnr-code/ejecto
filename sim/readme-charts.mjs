@@ -7,6 +7,8 @@ const OUT = process.argv[3] || "docs/img";
 fs.mkdirSync(OUT, { recursive: true });
 const res = JSON.parse(fs.readFileSync(`${IN}/ejecto-results.json`, "utf8"));
 const series = JSON.parse(fs.readFileSync(`${IN}/example-series.json`, "utf8"));
+// Optional: written by sim/at-death.mjs. Adds the race losers to the first chart.
+const atDeath = fs.existsSync(`${IN}/at-death.json`) ? JSON.parse(fs.readFileSync(`${IN}/at-death.json`, "utf8")) : null;
 
 const C = { bg: "#0b0b0c", panel: "#141417", grid: "#26262b", text: "#a3a3a8", bone: "#ece8df", hazard: "#ffd400", eject: "#ff4d1f", hud: "#3ddc84", muted: "#5b5b63" };
 const SANS = "Helvetica Neue, Helvetica, Arial, sans-serif";
@@ -14,9 +16,9 @@ const MONO = "SFMono-Regular, Menlo, Consolas, monospace";
 const W = 760;
 const H = 360;
 
-const frame = (title, sub, body) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">` +
-  `<rect width="${W}" height="${H}" rx="18" fill="${C.bg}"/>` +
+const frame = (title, sub, body, h = H) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${h}" width="${W}" height="${h}">` +
+  `<rect width="${W}" height="${h}" rx="18" fill="${C.bg}"/>` +
   `<text x="32" y="44" font-family="${SANS}" font-size="21" font-weight="700" fill="${C.bone}">${title}</text>` +
   `<text x="32" y="68" font-family="${MONO}" font-size="11.5" letter-spacing="0.6" fill="${C.text}">${sub}</text>` +
   body +
@@ -29,7 +31,10 @@ const t = (x, y, s, o = {}) =>
 function outcomes() {
   const s = res.summary;
   const rows = [
-    { label: "Traders wiped out (lose 90% or more)", a: s.baseline.wipedPct, b: s.ejecto.wipedPct, fmt: (v) => `${v.toFixed(2)}%` },
+    ...(atDeath
+      ? [{ label: "Last quarter to sell in the race: wiped out", a: atDeath.lastQuarterOfTheRace.wipedOutPct.exitRace, b: atDeath.lastQuarterOfTheRace.wipedOutPct.ejecto, fmt: (v) => `${v.toFixed(1)}%` }]
+      : []),
+    { label: "All traders: wiped out (lose 90% or more)", a: s.baseline.wipedPct, b: s.ejecto.wipedPct, fmt: (v) => `${v.toFixed(2)}%` },
     { label: "NEAR lost by losing traders, per coin", a: s.baseline.lossSum, b: s.ejecto.lossSum, fmt: (v) => `${v.toFixed(0)} N` },
   ];
   let body = "";
@@ -50,6 +55,7 @@ function outcomes() {
     "Same traders, same luck, a different ending",
     `${s.runs} COINS x ${s.traders} TRADERS x 60 DAYS. LOSSES DOWN ${s.lossReductionPct.toFixed(1)}%, NOBODY WIPED OUT.`,
     body,
+    120 + rows.length * 112 - 4,
   );
 }
 
