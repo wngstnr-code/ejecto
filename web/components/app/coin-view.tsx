@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { coinPhase, useCoin } from "@/lib/coin";
 import { explorerAccount, FACTORY_ID } from "@/lib/config";
-import { formatCompact, formatNear, formatPrice, unitsToTokens, yoctoToNear } from "@/lib/format";
+import { formatCompact, formatNear, unitsToTokens, yoctoToNear } from "@/lib/format";
 import { accessKeyCount, type CoinStatus } from "@/lib/near";
 import { prefersReducedMotion } from "@/lib/gsap";
 import { useWallet } from "@/lib/wallet";
@@ -13,7 +13,7 @@ import { CurveChart } from "./curve-chart";
 import { EngineMeter } from "./engine-meter";
 import { ClaimPanel, EjectPanel, SeatPanel } from "./seat-panels";
 import { TradePanel } from "./trade-panel";
-import { CoinIcon, DemoBanner, PhaseBadge, Stat } from "./ui";
+import { CoinIcon, DemoBanner, LockIcon, PhaseBadge, PriceText, Stat } from "./ui";
 
 // The 3D EJECT scene is a separate chunk, loaded only for coins that can be ejected.
 const EjectMoment = dynamic(() => import("./eject-moment"), { ssr: false });
@@ -53,7 +53,8 @@ export function CoinView({ id }: { id: string | null }) {
   const symbol = status.symbol.toUpperCase();
   const ej = status.ejected;
   const supply = unitsToTokens(ej ? ej.supply_e : status.supply);
-  const price = yoctoToNear(status.price);
+  // After EJECT, claims burn the supply and the live price falls back to P0, so show the price at EJECT.
+  const price = ej ? 2e-8 + 5e-16 * supply : yoctoToNear(status.price);
 
   return (
     <>
@@ -79,7 +80,7 @@ export function CoinView({ id }: { id: string | null }) {
                 {id}
               </a>
               <span className="flex items-center gap-2" title="Access keys on the coin account, read live">
-                <span className={`h-2 w-2 rounded-full ${keys === 0 ? "bg-hud" : "bg-muted"}`} />
+                <LockIcon className={`h-3.5 w-3.5 ${keys === 0 ? "text-hud" : "text-muted"}`} />
                 {keys === null ? "Checking keys" : `${keys} access keys`}
               </span>
               <span>Fee {status.fee_preset}</span>
@@ -89,7 +90,7 @@ export function CoinView({ id }: { id: string | null }) {
 
         {/* stat strip */}
         <div className="mt-12 grid grid-cols-2 gap-x-6 gap-y-8 border-y border-line py-8 md:grid-cols-4">
-          <Stat label={ej ? "Last price" : "Price"} value={formatPrice(price)} unit="NEAR" />
+          <Stat label={ej ? "Last price" : "Price"} value={<PriceText value={price} />} unit="NEAR" />
           <Stat label={ej ? "Supply at eject" : "Supply"} value={formatCompact(supply)} unit={symbol} />
           <Stat label={ej ? "Reserve left" : "Reserve"} value={formatNear(yoctoToNear(status.reserve), 3)} unit="NEAR" />
           <Stat
@@ -110,7 +111,11 @@ export function CoinView({ id }: { id: string | null }) {
             {phase === "ejected" ? (
               <ClaimPanel coinId={id} holder={holder} onDone={refresh} />
             ) : phase === "ejectable" ? (
-              <EjectPanel coinId={id} onEjected={onEjected} />
+              <>
+                <EjectPanel coinId={id} onEjected={onEjected} />
+                {/* Until someone pulls the handle the curve is still open, and buys can restart the engine. */}
+                <TradePanel coinId={id} status={status} holder={holder} onDone={refresh} revive />
+              </>
             ) : (
               <TradePanel coinId={id} status={status} holder={holder} onDone={refresh} />
             )}

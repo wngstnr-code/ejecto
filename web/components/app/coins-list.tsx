@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { coinPhase, type Phase } from "@/lib/coin";
 import { NETWORK } from "@/lib/config";
-import { formatNear, formatPrice, yoctoToNear } from "@/lib/format";
+import { formatNear, yoctoToNear } from "@/lib/format";
 import { getCoins, getMetadata, getStatus, type CoinInfo, type CoinStatus } from "@/lib/near";
-import { Amount, CoinIcon, NearIcon, PhaseBadge } from "./ui";
+import { Amount, CoinIcon, NearIcon, PhaseBadge, PriceText } from "./ui";
 
 type Row = { info: CoinInfo; status: CoinStatus | null; icon: string | null; phase: Phase | null };
 
@@ -227,7 +227,7 @@ function CoinRow({ row }: { row: Row }) {
       </span>
 
       <span className="relative tabular-nums">
-        {!status ? "..." : status.ejected ? <span className="text-muted group-hover:text-ink/60">Closed</span> : <Amount>{formatPrice(yoctoToNear(status.price))}</Amount>}
+        {!status ? "..." : status.ejected ? <span className="text-muted group-hover:text-ink/60">Closed</span> : <Amount><PriceText value={yoctoToNear(status.price)} /></Amount>}
       </span>
 
       <span className="relative tabular-nums">

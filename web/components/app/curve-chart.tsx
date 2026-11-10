@@ -1,9 +1,9 @@
 "use client";
 
 import { useRef, useState, type PointerEvent } from "react";
-import { formatCompact, formatNear, formatPct, formatPrice, unitsToTokens, yoctoToNear } from "@/lib/format";
+import { formatCompact, formatNear, formatPct, unitsToTokens, yoctoToNear } from "@/lib/format";
 import type { CoinStatus } from "@/lib/near";
-import { Amount, PanelTitle } from "./ui";
+import { Amount, PanelTitle, PriceText } from "./ui";
 
 // Curve constants fixed by the factory (spec section 4): price(s) = P0 + K * s, in NEAR per token.
 const P0 = 2e-8;
@@ -93,7 +93,15 @@ export function CurveChart({ status }: { status: CoinStatus }) {
               <line x1={x(supply)} x2={x(supply)} y1={y(0)} y2={y(price(supply))} className="stroke-hazard" strokeDasharray="3 4" />
               <circle cx={x(supply)} cy={y(price(supply))} r="12" className="fill-hazard/20" />
               <circle cx={x(supply)} cy={y(price(supply))} r="6" className="fill-hazard" />
-              <text x={x(supply)} y={y(price(supply)) - 20} textAnchor="middle" className="label fill-hazard" fontSize="11">
+              <text
+                x={x(supply)}
+                y={y(price(supply)) - 20}
+                // Keep the label inside the chart when the point sits near an edge.
+                textAnchor={x(supply) < 70 ? "start" : x(supply) > W - 70 ? "end" : "middle"}
+                dx={x(supply) < 70 ? -6 : x(supply) > W - 70 ? 6 : 0}
+                className="label fill-hazard"
+                fontSize="11"
+              >
                 {ejected ? "AT EJECT" : "NOW"}
               </text>
             </>
@@ -117,7 +125,7 @@ export function CurveChart({ status }: { status: CoinStatus }) {
             <div className="label text-muted">{near ? (ejected ? "Supply at eject" : "You are here") : "At supply"}</div>
             <div className="mt-1 text-xl font-semibold tabular-nums">{formatCompact(h)}</div>
             <dl className="label mt-3 space-y-1.5">
-              <Tip k="Price" v={<Amount>{formatPrice(price(h))}</Amount>} />
+              <Tip k="Price" v={<Amount><PriceText value={price(h)} /></Amount>} />
               <Tip k="Market cap" v={<Amount>{formatNear(price(h) * h, 3)}</Amount>} />
               <Tip k="Reserve" v={<Amount>{formatNear(reserveAt(h), 3)}</Amount>} />
               {priceMove !== null && !near && <Tip k={ejected ? "Price vs eject" : "Price vs now"} v={`${priceMove > 0 ? "+" : ""}${formatPct(priceMove, 1)}`} tone={priceMove > 0 ? "text-hud" : "text-eject"} />}
@@ -141,7 +149,7 @@ export function CurveChart({ status }: { status: CoinStatus }) {
 
         <div className="mt-4 grid grid-cols-3 gap-4">
           <Readout label={ejected ? "Supply at eject" : "Supply"} value={formatCompact(supply)} />
-          <Readout label="Price now" value={<Amount>{formatPrice(price(supply))}</Amount>} />
+          <Readout label={ejected ? "Price at eject" : "Price now"} value={<Amount><PriceText value={price(supply)} /></Amount>} />
           <Readout label="Reserve (shaded)" value={<Amount>{formatNear(reserve, 3)}</Amount>} />
         </div>
         <p className="label mt-4 text-muted">Hover the curve to read any point.</p>

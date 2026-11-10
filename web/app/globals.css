@@ -197,6 +197,43 @@ html[data-intro="on"] .pilot-layer {
   }
 }
 
+/* Ejectable badge: the eject triangle hops up off its bar, then drops back. */
+@keyframes eject-hop {
+  0%,
+  45%,
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  20% {
+    transform: translateY(-3px);
+    opacity: 0.55;
+  }
+}
+
+/* Alive badge: the heartbeat line keeps drawing itself. */
+@keyframes pulse-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: -1;
+  }
+}
+
+/* Dying badge: the arrow sinks toward the floor and fades. */
+@keyframes sink {
+  0%,
+  100% {
+    transform: translateY(-1px);
+    opacity: 1;
+  }
+  60% {
+    transform: translateY(1.5px);
+    opacity: 0.45;
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

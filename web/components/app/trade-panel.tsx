@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { GAS } from "@/lib/coin";
-import { formatCompact, formatNear, formatPrice, formatUnitsExact, parseNear, parseTokens, unitsToTokens, yoctoToNear } from "@/lib/format";
+import { formatCompact, formatNear, formatUnitsExact, parseNear, parseTokens, unitsToTokens, yoctoToNear } from "@/lib/format";
 import {
   accountBalance,
   quoteBuy,
@@ -16,7 +16,7 @@ import {
 } from "@/lib/near";
 import { call, errorText, useWallet } from "@/lib/wallet";
 import { TxNote, type Tx } from "./tx-note";
-import { Amount, NearIcon } from "./ui";
+import { Amount, NearIcon, PriceText } from "./ui";
 
 const MIN_BUY = 10n ** 21n; // 0.001 NEAR, contract minimum
 const GAS_BUFFER = 5n * 10n ** 22n; // keep 0.05 NEAR for gas when "Max" is used
@@ -30,11 +30,14 @@ export function TradePanel({
   status,
   holder,
   onDone,
+  revive = false,
 }: {
   coinId: string;
   status: CoinStatus;
   holder: HolderView | null;
   onDone: () => void;
+  /** The coin is ejectable but not ejected yet: trading still works and buys can revive it. */
+  revive?: boolean;
 }) {
   const { accountId, connect, send } = useWallet();
   const [mode, setMode] = useState<Mode>("buy");
@@ -150,6 +153,11 @@ export function TradePanel({
       </div>
 
       <div className="p-5 sm:p-6">
+        {revive && (
+          <p className="label mb-5 rounded-lg border border-dashed border-line px-3 py-2.5 leading-relaxed text-muted">
+            Not ejected yet. Buys still go through, and lifting the 14-day buys over the alive line brings the coin back.
+          </p>
+        )}
         <div className="flex items-center justify-between">
           <label htmlFor="amount" className="label text-muted">
             {mode === "buy" ? "You pay" : "You sell"}
@@ -195,13 +203,13 @@ export function TradePanel({
               <Row k="You get" v={q?.buy ? `~${formatCompact(unitsToTokens(q.buy.tokens_out))} ${symbol}` : "..."} strong />
               <Row k={`Ejecto Fund (${status.fund_buy_bps / 100}%)`} v={q?.buy ? <Amount>{formatNear(yoctoToNear(q.buy.fund_fee), 4)}</Amount> : "..."} />
               <Row k={`Protocol (${status.protocol_buy_bps / 100}%)`} v={q?.buy ? <Amount>{formatNear(yoctoToNear(q.buy.protocol_fee), 4)}</Amount> : "..."} />
-              <Row k="Price after" v={q?.buy ? <Amount>{formatPrice(yoctoToNear(q.buy.price_after))}</Amount> : "..."} />
+              <Row k="Price after" v={q?.buy ? <Amount><PriceText value={yoctoToNear(q.buy.price_after)} /></Amount> : "..."} />
             </>
           ) : (
             <>
               <Row k="You get" v={q?.sell ? <Amount>~{formatNear(yoctoToNear(q.sell.near_out), 4)}</Amount> : "..."} strong />
               <Row k={`Ejecto Fund (${status.fund_sell_bps / 100}%)`} v={q?.sell ? <Amount>{formatNear(yoctoToNear(q.sell.fund_fee), 4)}</Amount> : "..."} />
-              <Row k="Price after" v={q?.sell ? <Amount>{formatPrice(yoctoToNear(q.sell.price_after))}</Amount> : "..."} />
+              <Row k="Price after" v={q?.sell ? <Amount><PriceText value={yoctoToNear(q.sell.price_after)} /></Amount> : "..."} />
             </>
           )}
           <Row k="Max slippage" v="1%" />

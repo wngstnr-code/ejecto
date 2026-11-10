@@ -8,7 +8,7 @@ import { formatNear, yoctoToNear } from "@/lib/format";
 import { accessKeyCount, getCoin, getConfig, viewCall, type FactoryConfig } from "@/lib/near";
 import { call, errorText, useWallet } from "@/lib/wallet";
 import { TxNote, type Tx } from "./tx-note";
-import { Amount, CoinIcon } from "./ui";
+import { Amount, CoinIcon, LockIcon } from "./ui";
 
 type Preset = "light" | "standard" | "high";
 
@@ -331,7 +331,7 @@ function Launched({ coinId, name, symbol, icon }: { coinId: string; name: string
   }, [coinId]);
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center px-4 py-24 text-center">
+    <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-3xl flex-col items-center justify-center px-4 py-12 text-center">
       <CoinIcon icon={icon} symbol={symbol} className="h-24 w-24" />
       <p className="label mt-8 text-hud">Coin is live</p>
       <h1 className="display mt-3 text-5xl leading-none sm:text-7xl">{name}</h1>
@@ -342,7 +342,7 @@ function Launched({ coinId, name, symbol, icon }: { coinId: string; name: string
         rel="noreferrer"
         className="label mt-8 inline-flex items-center gap-3 rounded-full border border-line px-5 py-3 transition-colors hover:border-hud"
       >
-        <span className={`h-2 w-2 rounded-full ${keys === 0 ? "bg-hud shadow-[0_0_8px_2px_rgb(61_220_132_/_0.6)]" : "bg-muted"}`} />
+        <LockIcon className={`h-4 w-4 ${keys === 0 ? "text-hud" : "text-muted"}`} />
         {keys === null ? "Checking access keys..." : `${keys} access keys. Check it on the explorer.`}
       </a>
       <Link

@@ -2,26 +2,93 @@
 
 import type { ReactNode } from "react";
 import { PHASE_LABEL, type Phase } from "@/lib/coin";
+import { formatPrice } from "@/lib/format";
 
-const PHASE_STYLE: Record<Phase, { box: string; dot: string }> = {
-  new: { box: "border-line text-bone", dot: "bg-bone" },
-  alive: { box: "border-hud/50 text-hud", dot: "bg-hud" },
-  dying: { box: "border-hazard/60 text-hazard", dot: "bg-hazard" },
-  ejectable: { box: "border-eject bg-eject text-ink", dot: "bg-ink" },
-  ejected: { box: "border-line text-muted", dot: "bg-muted" },
+const PHASE_STYLE: Record<Phase, string> = {
+  new: "border-line text-bone",
+  alive: "border-hud/50 text-hud",
+  dying: "border-hazard/60 text-hazard",
+  ejectable: "border-eject bg-eject text-ink",
+  ejected: "border-line text-muted",
 };
 
-/** Phase pill. Ejectable pulses like the radar dot on the landing page. */
+const PHASE_ICON: Record<Phase, () => ReactNode> = {
+  new: HourglassIcon,
+  alive: PulseIcon,
+  dying: FallingIcon,
+  ejectable: EjectIcon,
+  ejected: ParachuteIcon,
+};
+
+/** Phase pill with a small icon. Live phases animate (pulse, falling, eject). */
 export function PhaseBadge({ phase, className = "" }: { phase: Phase; className?: string }) {
-  const st = PHASE_STYLE[phase];
+  const Icon = PHASE_ICON[phase];
   return (
-    <span className={`label inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-bold ${st.box} ${className}`}>
-      <span className="relative flex h-2 w-2">
-        {phase === "ejectable" && <span className="absolute inset-0 animate-radar rounded-full border-2 border-ink" />}
-        <span className={`relative h-2 w-2 rounded-full ${st.dot}`} />
-      </span>
+    <span className={`label inline-flex items-center gap-2 rounded-full border px-3 py-1.5 font-bold ${PHASE_STYLE[phase]} ${className}`}>
+      <Icon />
       {PHASE_LABEL[phase]}
     </span>
+  );
+}
+
+/** Heartbeat line that keeps drawing itself: the coin is alive. */
+function PulseIcon() {
+  return (
+    <svg viewBox="0 0 16 12" className="h-3 w-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M1 6h3.2l1.6-4 2.4 8 1.8-4H15" pathLength={1} strokeDasharray="1" className="animate-[pulse-draw_1.4s_linear_infinite]" />
+    </svg>
+  );
+}
+
+/** Arrow sinking toward a floor line: buys are fading. */
+function FallingIcon() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3 overflow-visible" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M6 1.5v5.5M3.5 4.8 6 7.3l2.5-2.5" className="animate-[sink_1.2s_ease-in-out_infinite]" />
+      <path d="M2 10.5h8" />
+    </svg>
+  );
+}
+
+/** Hourglass: younger than 14 days, the seat cannot fire yet. */
+function HourglassIcon() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" aria-hidden>
+      <path d="M2.5 1.2h7M2.5 10.8h7M3.3 1.2c0 2.6 2.7 3.3 2.7 4.8S3.3 8.2 3.3 10.8M8.7 1.2c0 2.6-2.7 3.3-2.7 4.8s2.7 2.2 2.7 4.8" />
+      <path d="M4.6 9.6h2.8L6 8.1z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Small parachute: the seat has fired and holders have landed. */
+function ParachuteIcon() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M1.2 5.2a4.8 4.2 0 0 1 9.6 0Z" fill="currentColor" fillOpacity="0.35" />
+      <path d="M1.2 5.2 6 9.6l4.8-4.4M6 5.2v4.4" />
+      <rect x="4.9" y="9.4" width="2.2" height="1.8" rx="0.4" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+/** Padlock: the coin account has no access keys, nobody can change it. */
+export function LockIcon({ className = "h-3.5 w-3.5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 12 14" className={className} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
+      <rect x="1.5" y="6" width="9" height="7" rx="1.6" fill="currentColor" fillOpacity="0.15" />
+      <path d="M3.5 6V4.2a2.5 2.5 0 0 1 5 0V6" />
+      <path d="M6 8.8v1.6" />
+    </svg>
+  );
+}
+
+/** Eject symbol for coins that can be ejected now: the triangle keeps launching off its bar. */
+function EjectIcon() {
+  return (
+    <svg viewBox="0 0 12 12" className="h-3 w-3 overflow-visible" fill="currentColor" aria-hidden>
+      <path d="M6 1.2 10.4 6.6H1.6z" className="animate-[eject-hop_1.1s_cubic-bezier(0.3,0,0.2,1)_infinite]" />
+      <rect x="1.6" y="8.6" width="8.8" height="1.8" rx="0.4" />
+    </svg>
   );
 }
 
@@ -100,6 +167,27 @@ export function Amount({ children, icon = "text-muted", className = "" }: { chil
     <span className={`inline-flex items-center gap-[0.3em] whitespace-nowrap ${className}`}>
       {children}
       <NearIcon className={`h-[0.72em] w-[0.72em] ${icon}`} />
+    </span>
+  );
+}
+
+const SUBSCRIPTS = "\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089";
+
+/**
+ * A price in NEAR. Tiny prices use the zero count notation (0.0, then the number of zeros small and low,
+ * then the digits), drawn as a real subscript so it stays readable. Hover shows the full decimal.
+ */
+export function PriceText({ value }: { value: number }) {
+  const text = formatPrice(value);
+  const m = text.match(/^0\.0([\u2080-\u2089]+)(\d+)$/);
+  if (!m) return <>{text}</>;
+  const zeros = [...m[1]].map((c) => SUBSCRIPTS.indexOf(c)).join("");
+  const full = value.toFixed(Number(zeros) + 1 + m[2].length).replace(/0+$/, "");
+  return (
+    <span title={`${full} NEAR`} className="whitespace-nowrap">
+      0.0
+      <sub className="relative bottom-[-0.05em] mx-[0.04em] text-[0.62em] font-semibold leading-none">{zeros}</sub>
+      {m[2]}
     </span>
   );
 }
