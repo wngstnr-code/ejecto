@@ -11,6 +11,12 @@ export const EXPLORER_URL =
 
 export const REPO_URL = "https://github.com/wngstnr-code/ejecto";
 
+/** Public NearBlocks API (v3), used only to list a coin's transactions for the price history. */
+export const NEARBLOCKS_API = NETWORK === "mainnet" ? "https://api.nearblocks.io" : "https://api-testnet.nearblocks.io";
+/** Archival RPC, fallback for transactions too old for the regular RPC. */
+export const ARCHIVAL_RPC_URL =
+  NETWORK === "mainnet" ? "https://archival-rpc.mainnet.fastnear.com" : "https://archival-rpc.testnet.fastnear.com";
+
 export function explorerAccount(accountId: string) {
   return `${EXPLORER_URL}/address/${accountId}`;
 }
