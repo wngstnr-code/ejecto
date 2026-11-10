@@ -1,0 +1,94 @@
+name: CI
+
+# Checks every push and pull request: repo hygiene, contract unit tests, sandbox integration tests
+# (real wasm in a local NEAR sandbox) and the web app (lint, types, static build).
+# Hosting is on Vercel, which deploys on its own from the main branch.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    name: No em or en dashes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/check-dashes.mjs
+
+  contracts:
+    name: Contract unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts
+      - name: Coin
+        run: cargo test -p ejecto-coin
+      - name: Factory
+        run: cargo test -p ejecto-factory --lib
+
+  sandbox:
+    name: Sandbox integration tests
+    runs-on: ubuntu-latest
+    needs: contracts
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: contracts
+      - name: Install cargo-near 0.22.0
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/download/cargo-near-v0.22.0/cargo-near-installer.sh | sh
+      - name: Build wasm
+        run: |
+          (cd coin && cargo near build non-reproducible-wasm)
+          (cd factory && cargo near build non-reproducible-wasm)
+      - name: Integration tests
+        run: cd factory && cargo test --test integration -- --test-threads=1
+
+  web:
+    name: Web lint, types and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm exec tsc --noEmit
+      - name: Static build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_SITE_URL: https://ejecto.vercel.app
