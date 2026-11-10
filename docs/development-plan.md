@@ -58,7 +58,7 @@ Done when: a coin launched on testnet has zero access keys (visible in an explor
 - [x] Wallet connection (NEAR Connect, D-027)
 - [x] Coins, Launch, Coin pages (engine meter, your seat, EJECT, claim, DEMO TIME banner). Built, not yet tested with a signed transaction.
 - [x] ~~Simulation page~~ cut (D-028): the landing shows the model data
-- [ ] Deploy to GitHub Pages
+- [x] Deploy to Vercel (D-031): https://ejecto.vercel.app
 
 Done when: a judge can open the hosted page, connect a testnet wallet, and run the full demo flow.
 

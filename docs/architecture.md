@@ -6,7 +6,7 @@ Mechanics and formulas are defined in `product-spec.md`. This file explains how 
 
 ```
               +----------------------+
-  user  --->  |  Static web app      |  (Next.js static export + Tailwind, GitHub Pages)
+  user  --->  |  Static web app      |  (Next.js static export + Tailwind, Vercel)
   wallet      |  reads via RPC       |
               +----------+-----------+
                          | view calls and signed transactions (public RPC)
@@ -122,7 +122,7 @@ Measured in the sandbox (2026-11-09): `create_coin` 45.8 Tgas, `storage_deposit`
 
 ## 4. Web app (`web/`)
 
-- Next.js 16 (App Router) + Tailwind CSS 4 + TypeScript (D-022). `output: 'export'` builds plain static files into `web/out`, hosted on GitHub Pages with `basePath` set to the repo name. No server code: no API routes, no server actions, no middleware, no `next/image` optimization (`images.unoptimized`).
+- Next.js 16 (App Router) + Tailwind CSS 4 + TypeScript (D-022). `output: 'export'` builds plain static files into `web/out`, hosted on Vercel (D-031). `basePath` is still supported through `NEXT_PUBLIC_BASE_PATH` for sub-path hosting. No server code: no API routes, no server actions, no middleware, no `next/image` optimization (`images.unoptimized`).
 - Every page that touches the wallet or RPC is a client component. The coin page is `/coin/?id=<coin account>` (query parameter, read with `useSearchParams` inside `Suspense`), because coins are created at runtime and static export cannot pre-render unknown dynamic routes.
 - Wallet connection: NEAR Connect (`@hot-labs/near-connect`, D-027) in `web/lib/wallet.tsx`. The connector is created only in the browser. A first buy sends `storage_deposit` and `buy` as two function calls in one transaction.
 - RPC reads: small `fetch` JSON-RPC helpers in `web/lib/near.ts` (view calls, account balance, access key lists) to the public testnet RPC (`https://test.rpc.fastnear.com` by default). No `near-api-js`.

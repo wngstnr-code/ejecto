@@ -15,7 +15,7 @@ Update this file at the end of every session and after every milestone. Newest e
 
 1. Done for buy, EJECT and claim (see the session log). Launch from the `/launch/` form (`wngst`) and sell (`2hVG73vDZ8XEkZTEYxJKqt6Y7XeAnegwGnAoBG5cykP2`, 2% fund fee on the gross) also done. Every flow has now run on testnet. For the demo video use a fresh coin and buy more than 1 NEAR in total within the first 140 s (10 s days), or use longer demo days, so the coin is alive before it dies.
 2. Check the app pages and the landing at phone width.
-3. Deploy to GitHub Pages with `NEXT_PUBLIC_BASE_PATH=/ejecto`, then repeat a quick smoke test on the hosted site.
+3. Done: live at https://ejecto.vercel.app (Vercel, D-031). Check the CI run on GitHub after each push.
 4. M5: README with "do X, see Y" steps, MIT LICENSE, demo video, then ask the user to make the repo public.
 
 ## Blockers and open questions
@@ -141,6 +141,7 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 - Coin icons are round. Coins without an on-chain icon (like `seato`, whose metadata is locked) get a generated coin (reeded rim, tone fixed per symbol). The bonding curve is hoverable: price, market cap, reserve, change against now, and the NEAR needed to move the price there. The `/coins/` list is a table card with filter dropdowns, sorting and a full view. The header wallet pill shows the connected wallet's logo. The GitHub link left both headers (it stays in the footer).
 - Repo made public with the user's approval. Contracts verified on NearBlocks: reproducible Docker builds (SourceScan image pinned by digest, D-029), factory state cleared and redeployed, Seato ($SEAT) launched with a generated coin logo. Landing safeguards use an animated broadcast icon for live reads. The landing always starts at the top for the intro.
 - End-to-end on testnet with the user's NEAR CLI wallet on `seat`: buy 0.01 NEAR from the coin page (`storage_deposit` + `buy` in one tx, `Dj3Uizqn3CqQZtNgPW339vfWjmvvUrPtc3ybKTMHpAyG`), EJECT (`GqdoULbw6mWEMd7Tbh26LFzKsqdaUU6ngHHMNP5SagES`), claim 0.00995 NEAR = reserve 0.0098 + fund 0.00015 (`26zjMv26FQVG1UtVKx2cbXsLVKFQUPMdCKDmZ9JmkuZb`). NEAR CLI wallet note: when a command runs without a terminal (for example through `!`), append `send`.
+- Hosted on Vercel at https://ejecto.vercel.app (D-031, deployed by the user). Smoke test: every page 200, both GLB models and brand assets served, `og:image` and `twitter:image` point to the Vercel URL. GitHub Actions CI added (`.github/workflows/ci.yml`).
 - `/seats/` (My seats): every coin the wallet holds, ready-to-claim cards with a Claim button, flying table with the payout if ejected now, landed list. Linked in the app header and the footer.
 - Price history chart on the coin page (D-030): step line of price over time with buy and sell dots, hover details, live reload on every supply change, eject marker.
 - Sell tab: 25% / 50% / Max buttons and a NEAR estimate under the token input (a user had typed 0.05 meaning NEAR). Engine meter notes that sells do not count. The bonding curve glides to each new supply, sends a ring out on every on-chain change, and shows a live indicator (polled every 4 s).

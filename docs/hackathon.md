@@ -63,7 +63,7 @@ Total $250,000, fixed in USD, paid in NEAR to the account given in the form. Pai
 - [ ] Public GitHub repo with a LICENSE
 - [ ] README written for a machine reader and a human: what it is, the problem, and "do X, see Y" steps (hosted demo, local run, tests, simulation)
 - [ ] README lists libraries and AI-generated code
-- [ ] Hosted demo on GitHub Pages, working with testnet
+- [x] Hosted demo on Vercel, working with testnet (https://ejecto.vercel.app)
 - [ ] Demo video (about 3 minutes)
 - [ ] X post: built at NEAR HACKATHON, tags @NEARProtocol and #NEARHackathon, video attached, NEAR's role explained concretely (posted by the user)
 - [ ] Form submitted with tracks memecoins and social (by the user)

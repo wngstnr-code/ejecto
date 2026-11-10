@@ -199,7 +199,7 @@ pnpm dev                    # local dev server
 pnpm build                  # static export in web/out
 ```
 
-Hosting: GitHub Pages from `web/out` (GitHub Actions workflow or the `gh-pages` branch). `web/next.config.ts` sets `output: 'export'`, `basePath` to the repo name, `trailingSlash: true` and `images.unoptimized: true`. Add an empty `.nojekyll` file to the output so GitHub Pages serves the `_next/` folder.
+Hosting: Vercel (D-031). Import the GitHub repo, set **Root Directory** to `web`, framework preset Next.js (pnpm is picked up from `packageManager`). `output: 'export'` makes Vercel serve the static files. Environment variables in the Vercel project: `NEXT_PUBLIC_SITE_URL` = the deployment URL (for example `https://ejecto.vercel.app`). Optional, with testnet defaults in `web/lib/config.ts`: `NEXT_PUBLIC_NETWORK`, `NEXT_PUBLIC_RPC_URL`, `NEXT_PUBLIC_FACTORY_ID`. Leave `NEXT_PUBLIC_BASE_PATH` unset. The root `.env` is gitignored, so Vercel never sees it.
 
 `web/next.config.ts` must call `loadEnvConfig` (from `@next/env`) on the repo root so Next.js reads the root `.env`. Only variables that start with `NEXT_PUBLIC_` reach the browser. Never put anything secret in a `NEXT_PUBLIC_` variable.
 
@@ -218,6 +218,10 @@ node scripts/check-dashes.mjs
 ```
 
 Fails if any tracked text file contains an em dash (U+2014) or an en dash (U+2013).
+
+## CI (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on every push to `main`, on pull requests, and by hand: the dash check, contract unit tests (`ejecto-coin`, `ejecto-factory --lib`), the sandbox integration tests (cargo-near 0.22.0 builds both wasm files first) and the web app (lint, `tsc`, static build). Vercel deploys the site by itself from `main`.
 
 ## 7. Public RPC
 
