@@ -72,10 +72,11 @@ export function SeatsView() {
           </p>
         </div>
         {accountId && seats && (
-          <div className="flex flex-wrap gap-3">
+          <div className="grid w-full grid-cols-3 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:gap-3">
+            {/* phones: three equal stat boxes on one row; larger screens: pills */}
             <Pill label="Seats" value={String(flying.length + toClaim.length)} />
-            <Pill label="Ready to claim" value={<Amount className={claimTotal > 0 ? "text-hazard" : ""}>{formatNear(claimTotal, 4)}</Amount>} />
-            <Pill label="If all ejected now" value={<Amount>{formatNear(ifNowTotal, 4)}</Amount>} />
+            <Pill label="Ready to claim" short="To claim" value={<Amount className={claimTotal > 0 ? "text-hazard" : ""}>{formatNear(claimTotal, 4)}</Amount>} />
+            <Pill label="If all ejected now" short="If ejected" value={<Amount>{formatNear(ifNowTotal, 4)}</Amount>} />
           </div>
         )}
       </div>
@@ -135,15 +136,15 @@ export function SeatsView() {
             ) : (
               <div className="mt-6 overflow-hidden rounded-2xl border border-line bg-panel">
                 <div className="overflow-x-auto" data-lenis-prevent>
-                  <div className="min-w-[760px]">
-                    <div className="label grid grid-cols-[minmax(200px,2fr)_9.5rem_1fr_1fr_0.8fr_1fr_1.5rem] gap-x-5 border-b border-line px-5 py-3 text-muted">
+                  <div className="md:min-w-[760px]">
+                    <div className={`label grid ${SEAT_COLS} gap-x-5 border-b border-line px-4 py-3 text-muted sm:px-5`}>
                       <span>Coin</span>
-                      <span>Status</span>
-                      <span>Balance</span>
-                      <span>Net in</span>
-                      <span>Fund weight</span>
+                      <span className="hidden md:block">Status</span>
+                      <span className="hidden md:block">Balance</span>
+                      <span className="hidden md:block">Net in</span>
+                      <span className="hidden md:block">Fund weight</span>
                       <span className="text-right">If ejected now</span>
-                      <span />
+                      <span className="hidden md:block" />
                     </div>
                     {flying.map((s) => (
                       <SeatRow key={s.info.account_id} seat={s} amount={payout(s.holder)} />
@@ -178,6 +179,9 @@ export function SeatsView() {
   );
 }
 
+// Phones: coin and payout only (status and weight under the name). From md up: the full table.
+const SEAT_COLS = "grid-cols-[1fr_auto] md:grid-cols-[minmax(200px,2fr)_9.5rem_1fr_1fr_0.8fr_1fr_1.5rem]";
+
 function SeatRow({ seat, amount }: { seat: Seat; amount: number }) {
   const { info, holder, icon, phase } = seat;
   const basisRaw = BigInt(holder.basis);
@@ -187,7 +191,7 @@ function SeatRow({ seat, amount }: { seat: Seat; amount: number }) {
   return (
     <Link
       href={`/coin/?id=${info.account_id}`}
-      className="group relative grid grid-cols-[minmax(200px,2fr)_9.5rem_1fr_1fr_0.8fr_1fr_1.5rem] items-center gap-x-5 border-b border-line px-5 py-4 transition-colors duration-300 last:border-b-0 hover:text-ink"
+      className={`group relative grid ${SEAT_COLS} items-center gap-x-5 border-b border-line px-4 py-4 sm:px-5 transition-colors duration-300 last:border-b-0 hover:text-ink`}
     >
       <div
         aria-hidden
@@ -198,23 +202,28 @@ function SeatRow({ seat, amount }: { seat: Seat; amount: number }) {
         <span className="min-w-0">
           <span className="block truncate font-semibold tracking-tight">{info.name}</span>
           <span className="label mt-0.5 block text-muted group-hover:text-ink/60">${info.symbol.toUpperCase()}</span>
+          {/* phones only: what the hidden columns show on larger screens */}
+          <span className="label mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-muted md:hidden">
+            <PhaseBadge phase={phase} />
+            <span>{formatPct(share, 2)} weight</span>
+          </span>
         </span>
       </span>
-      <span className="relative">
+      <span className="relative hidden md:block">
         <PhaseBadge phase={phase} className="group-hover:border-ink group-hover:text-ink" />
       </span>
-      <span className="relative tabular-nums">{formatCompact(unitsToTokens(holder.balance))}</span>
-      <span className="relative tabular-nums">
+      <span className="relative hidden tabular-nums md:block">{formatCompact(unitsToTokens(holder.balance))}</span>
+      <span className="relative hidden tabular-nums md:block">
         <Amount icon="text-muted group-hover:text-ink/70">{`${basis < 0 ? "-" : ""}${formatNear(Math.abs(basis), 4)}`}</Amount>
       </span>
-      <span className="relative tabular-nums">{formatPct(share, 2)}</span>
+      <span className="relative hidden tabular-nums md:block">{formatPct(share, 2)}</span>
       <span className="relative text-right tabular-nums">
         <Amount className="text-hazard group-hover:text-ink" icon="text-muted group-hover:text-ink/70">
           {formatNear(amount, 4)}
         </Amount>
         {phase === "ejectable" && <span className="label mt-1 block text-eject group-hover:text-ink">Pull the handle</span>}
       </span>
-      <span className="relative text-right text-muted transition-transform group-hover:translate-x-1 group-hover:text-ink" aria-hidden>
+      <span className="relative hidden text-right text-muted transition-transform group-hover:translate-x-1 md:block group-hover:text-ink" aria-hidden>
         &rarr;
       </span>
     </Link>
@@ -285,11 +294,12 @@ function SectionTitle({ n, title, note }: { n: string; title: string; note: stri
   );
 }
 
-function Pill({ label, value }: { label: string; value: React.ReactNode }) {
+function Pill({ label, short, value }: { label: string; short?: string; value: React.ReactNode }) {
   return (
-    <div className="label flex items-center gap-2.5 rounded-full border border-line px-4 py-3">
+    <div className="label flex min-w-0 flex-col items-start gap-1 whitespace-nowrap rounded-xl border border-line px-3 py-2.5 sm:flex-row sm:items-center sm:gap-2.5 sm:rounded-full sm:px-4 sm:py-3">
       <span className="font-bold tabular-nums text-bone">{value}</span>
-      <span className="text-muted">{label}</span>
+      <span className="text-muted sm:hidden">{short ?? label}</span>
+      <span className="hidden text-muted sm:inline">{label}</span>
     </div>
   );
 }

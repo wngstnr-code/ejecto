@@ -121,8 +121,11 @@ export function CoinsList() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Pill icon={<FlyIcon />} value={rows ? String(totals.flying) : "-"} label="Flying" />
-          <Pill icon={<NearIcon className="h-3.5 w-3.5 text-bone" />} value={rows ? formatNear(totals.fund, 2) : "-"} label="In Ejecto Funds" />
+          {/* the two stats stay on one row, also on phones */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Pill icon={<FlyIcon />} value={rows ? String(totals.flying) : "-"} label="Flying" />
+            <Pill icon={<NearIcon className="h-3.5 w-3.5 text-bone" />} value={rows ? formatNear(totals.fund, 2) : "-"} label="In Ejecto Funds" short="In funds" />
+          </div>
           <Link
             href="/launch/"
             className="label rounded-full bg-hazard px-5 py-3 font-bold text-ink transition-transform hover:-translate-y-0.5"
@@ -220,16 +223,27 @@ function CoinRow({ row }: { row: Row }) {
             ${info.symbol.toUpperCase()}
             {info.day_length_sec < 86400 && <span className="ml-2 text-hazard group-hover:text-ink">Demo</span>}
           </span>
-          {/* phones only: the numbers that the hidden columns show on larger screens */}
-          <span className="label mt-1 flex gap-3 whitespace-nowrap text-muted md:hidden">
-            <span>{!status ? "..." : status.ejected ? "Closed" : <Amount><PriceText value={yoctoToNear(status.price)} /></Amount>}</span>
-            <span className="text-hazard"><Amount>{formatNear(fundOf(row), 3)}</Amount> fund</span>
-          </span>
         </span>
       </span>
 
-      <span className="relative">
+      <span className="relative self-start md:self-auto">
         {phase ? <PhaseBadge phase={phase} className="group-hover:border-ink group-hover:text-ink" /> : <span className="label text-muted">...</span>}
+      </span>
+
+      {/* phones only: the numbers of the hidden columns, on their own row under the name */}
+      <span className="relative col-span-2 mt-3 flex gap-8 pl-[3.25rem] md:hidden">
+        <span>
+          <span className="label block text-muted">Price</span>
+          <span className="mt-1 block tabular-nums">
+            {!status ? "..." : status.ejected ? <span className="text-muted">Closed</span> : <Amount><PriceText value={yoctoToNear(status.price)} /></Amount>}
+          </span>
+        </span>
+        <span>
+          <span className="label block text-muted">Ejecto Fund</span>
+          <span className="mt-1 block tabular-nums">
+            <Amount icon="text-muted"><span className="text-hazard">{formatNear(fundOf(row), 3)}</span></Amount>
+          </span>
+        </span>
       </span>
 
       <span className="relative hidden tabular-nums md:block">
@@ -356,12 +370,19 @@ function SortHead({
   );
 }
 
-function Pill({ value, label, icon }: { value: string; label: string; icon: React.ReactNode }) {
+function Pill({ value, label, short, icon }: { value: string; label: string; short?: string; icon: React.ReactNode }) {
   return (
-    <div className="label flex items-center gap-2.5 rounded-full border border-line px-4 py-3">
+    <div className="label flex items-center gap-2 whitespace-nowrap rounded-full border border-line px-3 py-2.5 sm:gap-2.5 sm:px-4 sm:py-3">
       {icon}
       <span className="font-bold tabular-nums text-bone">{value}</span>
-      <span className="text-muted">{label}</span>
+      {short ? (
+        <>
+          <span className="text-muted sm:hidden">{short}</span>
+          <span className="hidden text-muted sm:inline">{label}</span>
+        </>
+      ) : (
+        <span className="text-muted">{label}</span>
+      )}
     </div>
   );
 }
