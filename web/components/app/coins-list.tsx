@@ -27,7 +27,8 @@ const CLOCK_OPTIONS: Array<{ id: ClockFilter; label: string }> = [
 ];
 
 const POLL_MS = 8000;
-const COLS = "grid-cols-[minmax(220px,2fr)_9.5rem_1fr_1fr_1.2fr_7rem_1.5rem]";
+// Phones: coin and status only (price and fund under the name). From md up: the full table.
+const COLS = "grid-cols-[1fr_auto] md:grid-cols-[minmax(220px,2fr)_9.5rem_1fr_1fr_1.2fr_7rem_1.5rem]";
 
 const fundOf = (r: Row) => (r.status ? yoctoToNear(r.status.ejected ? r.status.ejected.fund_e : r.status.fund) : 0);
 const engineOf = (r: Row) =>
@@ -173,15 +174,15 @@ export function CoinsList() {
 
         {/* table: scrolls inside the card, sideways on small screens */}
         <div className={`overflow-auto ${expanded ? "flex-1" : "max-h-[68vh] min-h-[420px]"}`} data-lenis-prevent>
-          <div className="min-w-[860px]">
+          <div className="md:min-w-[860px]">
             <div className={`label sticky top-0 z-10 grid ${COLS} items-center gap-x-5 border-b border-line bg-panel px-4 py-3 text-muted sm:px-5`}>
               <span>Coin</span>
               <span>Status</span>
-              <SortHead k="price" sort={sort} onClick={toggleSort}>Price</SortHead>
-              <SortHead k="fund" sort={sort} onClick={toggleSort}>Ejecto Fund</SortHead>
-              <SortHead k="engine" sort={sort} onClick={toggleSort}>Engine, 14 days</SortHead>
-              <SortHead k="launched" sort={sort} onClick={toggleSort} right>Launched</SortHead>
-              <span />
+              <SortHead k="price" hide sort={sort} onClick={toggleSort}>Price</SortHead>
+              <SortHead k="fund" hide sort={sort} onClick={toggleSort}>Ejecto Fund</SortHead>
+              <SortHead k="engine" hide sort={sort} onClick={toggleSort}>Engine, 14 days</SortHead>
+              <SortHead k="launched" hide sort={sort} onClick={toggleSort} right>Launched</SortHead>
+              <span className="hidden md:block" />
             </div>
 
             {error && !rows && <Notice text={`Could not read the factory (${error}).`} />}
@@ -219,6 +220,11 @@ function CoinRow({ row }: { row: Row }) {
             ${info.symbol.toUpperCase()}
             {info.day_length_sec < 86400 && <span className="ml-2 text-hazard group-hover:text-ink">Demo</span>}
           </span>
+          {/* phones only: the numbers that the hidden columns show on larger screens */}
+          <span className="label mt-1 flex gap-3 whitespace-nowrap text-muted md:hidden">
+            <span>{!status ? "..." : status.ejected ? "Closed" : <Amount><PriceText value={yoctoToNear(status.price)} /></Amount>}</span>
+            <span className="text-hazard"><Amount>{formatNear(fundOf(row), 3)}</Amount> fund</span>
+          </span>
         </span>
       </span>
 
@@ -226,17 +232,17 @@ function CoinRow({ row }: { row: Row }) {
         {phase ? <PhaseBadge phase={phase} className="group-hover:border-ink group-hover:text-ink" /> : <span className="label text-muted">...</span>}
       </span>
 
-      <span className="relative tabular-nums">
+      <span className="relative hidden tabular-nums md:block">
         {!status ? "..." : status.ejected ? <span className="text-muted group-hover:text-ink/60">Closed</span> : <Amount><PriceText value={yoctoToNear(status.price)} /></Amount>}
       </span>
 
-      <span className="relative tabular-nums">
+      <span className="relative hidden tabular-nums md:block">
         <Amount icon="text-muted group-hover:text-ink/70">
           <span className="text-hazard transition-colors group-hover:text-ink">{formatNear(fundOf(row), 3)}</span>
         </Amount>
       </span>
 
-      <span className="relative flex items-center gap-3">
+      <span className="relative hidden items-center gap-3 md:flex">
         <span className="block h-2.5 flex-1 overflow-hidden bg-panel-2 group-hover:bg-ink/15">
           <span className={`bar-stripes block h-full ${barTone}`} style={{ width: `${fill * 100}%` }} />
         </span>
@@ -245,8 +251,8 @@ function CoinRow({ row }: { row: Row }) {
         </span>
       </span>
 
-      <span className="label relative text-right tabular-nums text-muted group-hover:text-ink/70">{timeAgo(info.created_at)}</span>
-      <span className="relative text-right text-muted transition-transform group-hover:translate-x-1 group-hover:text-ink" aria-hidden>
+      <span className="label relative hidden text-right tabular-nums text-muted group-hover:text-ink/70 md:block">{timeAgo(info.created_at)}</span>
+      <span className="relative hidden text-right text-muted transition-transform md:block group-hover:translate-x-1 group-hover:text-ink" aria-hidden>
         &rarr;
       </span>
     </Link>
@@ -325,8 +331,10 @@ function SortHead({
   sort,
   onClick,
   right,
+  hide,
   children,
 }: {
+  hide?: boolean;
   k: SortKey;
   sort: { key: SortKey; dir: 1 | -1 };
   onClick: (k: SortKey) => void;
@@ -338,7 +346,7 @@ function SortHead({
     <button
       type="button"
       onClick={() => onClick(k)}
-      className={`flex items-center gap-1.5 uppercase transition-colors hover:text-bone ${right ? "justify-end" : ""} ${on ? "text-bone" : ""}`}
+      className={`${hide ? "hidden md:flex" : "flex"} items-center gap-1.5 uppercase transition-colors hover:text-bone ${right ? "justify-end" : ""} ${on ? "text-bone" : ""}`}
     >
       {children}
       <span className={on ? "text-hazard" : "opacity-0"} aria-hidden>

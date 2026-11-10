@@ -45,7 +45,7 @@ export function Compare() {
       <div className="mx-auto max-w-7xl px-4 py-32 sm:px-8">
         {/* Left column only: the 3D pilot floats on the right. */}
         <div className="lg:w-[64%]">
-        <h2 className="display whitespace-nowrap text-6xl sm:text-8xl">The math</h2>
+        <h2 className="display whitespace-nowrap text-[14vw] sm:text-8xl">The math</h2>
         <p className="label mt-5 leading-relaxed text-muted">
           {s.runs} simulated coins, {s.traders} traders each, 60 days.
           <br />

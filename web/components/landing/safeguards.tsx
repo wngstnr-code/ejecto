@@ -77,7 +77,7 @@ export function Safeguards() {
       <div className="mx-auto max-w-7xl px-4 py-32 sm:px-8">
         <div className="lg:ml-auto lg:w-[64%]">
           <div className="lg:text-right">
-            <h2 className="display whitespace-nowrap text-5xl sm:text-7xl">Safeguards</h2>
+            <h2 className="display whitespace-nowrap text-[10.5vw] sm:text-7xl">Safeguards</h2>
             <p className="label mt-5 leading-relaxed text-muted">
               The track rules: the mechanic lives in the contract, no admin key.
               <br />

@@ -266,6 +266,8 @@ function Pilot() {
       s = THREE.MathUtils.lerp(introPose.s, s, k);
     }
     s *= pilotScroll.appear;
+    // Phones have no free column for the pilot: after the hero it shrinks away instead of covering text.
+    if (narrow) s *= 1 - THREE.MathUtils.smoothstep(pilotScroll.hero, 0.45, 0.9);
 
     // Front light for the loading intro (the black loading screen needs more light on the pilot).
     if (introLight.current) introLight.current.intensity = 2.6 * (1 - THREE.MathUtils.smoothstep(intro, 0, 0.6)) * pilotScroll.appear;

@@ -68,7 +68,7 @@ export function CrashChart() {
           <div className="mx-auto w-full max-w-7xl">
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
               <h2 className="display text-6xl sm:text-8xl">The crash</h2>
-              <div className="flex gap-6 font-mono">
+              <div className="grid w-full grid-cols-2 gap-x-6 gap-y-3 font-mono sm:flex sm:w-auto sm:gap-6">
                 <Readout label="Day" value={String(day).padStart(2, "0")} />
                 <Readout label="14-day buys" value={`${formatNear(point.windowBuys, 0)} N`} />
                 <Readout label="Alive line" value={`${formatNear(point.threshold, 1)} N`} />
@@ -149,13 +149,21 @@ export function CrashChart() {
                       <div className={`mt-3 transition-opacity duration-300 ${active ? "opacity-100" : "opacity-40"}`}>
                         <div className="label flex gap-2">
                           <span className={st.n === "03" ? "text-eject" : "text-hazard"}>[{st.n}]</span>
-                          <span className="font-bold text-bone">{st.title}</span>
+                          <span className="hidden font-bold text-bone md:inline">{st.title}</span>
                         </div>
-                        <p className={`mt-1 text-sm leading-snug text-muted ${active ? "" : "hidden md:block"}`}>{st.body}</p>
+                        <p className="mt-1 hidden text-sm leading-snug text-muted md:block">{st.body}</p>
                       </div>
                     </div>
                   );
                 })}
+              </div>
+              {/* Phones: the stage columns are too narrow for text, so the active stage is spelled out below. */}
+              <div className="mt-4 md:hidden">
+                <div className="label flex gap-2">
+                  <span className={stage.n === "03" ? "text-eject" : "text-hazard"}>[{stage.n}]</span>
+                  <span className="font-bold text-bone">{stage.title}</span>
+                </div>
+                <p className="mt-1 text-sm leading-snug text-muted">{stage.body}</p>
               </div>
 
             </div>

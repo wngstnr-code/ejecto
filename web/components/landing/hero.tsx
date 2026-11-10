@@ -36,7 +36,7 @@ export function Hero() {
 
       <div className="relative mx-auto grid w-full max-w-7xl flex-1 items-center gap-6 px-4 pb-[16vh] pt-20 sm:px-8 lg:grid-cols-[1.05fr_1fr]">
         <div className="relative z-10">
-          <h1 className="display text-[15vw] text-bone sm:text-[11vw] lg:text-[6.6rem]">
+          <h1 className="display text-[12vw] text-bone sm:text-[11vw] lg:text-[6.6rem]">
             <span className="block overflow-hidden">
               <span className="hero-reveal block">Every</span>
             </span>
