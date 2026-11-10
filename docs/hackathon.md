@@ -65,7 +65,7 @@ Total $250,000, fixed in USD, paid in NEAR to the account given in the form. Pai
 - [ ] README lists libraries and AI-generated code
 - [x] Hosted demo on Vercel, working with testnet (https://ejecto.vercel.app)
 - [ ] Demo video (about 3 minutes)
-- [ ] X post: built at NEAR HACKATHON, tags @NEARProtocol and #NEARHackathon, video attached, NEAR's role explained concretely (posted by the user)
+- [x] X post: built at NEAR HACKATHON, tags @NEARProtocol and #NEARHackathon, video attached, NEAR's role explained concretely (posted by the user): https://x.com/Dudung_gg/status/2120172645438374353
 - [ ] Form submitted with tracks memecoins and social (by the user)
 - [ ] Everything done before 2026-11-14 23:59 UTC
 
