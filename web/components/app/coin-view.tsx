@@ -10,6 +10,7 @@ import { accessKeyCount, type CoinStatus } from "@/lib/near";
 import { prefersReducedMotion } from "@/lib/gsap";
 import { useWallet } from "@/lib/wallet";
 import { CurveChart } from "./curve-chart";
+import { PriceHistory } from "./price-history";
 import { EngineMeter } from "./engine-meter";
 import { ClaimPanel, EjectPanel, SeatPanel } from "./seat-panels";
 import { TradePanel } from "./trade-panel";
@@ -103,6 +104,7 @@ export function CoinView({ id }: { id: string | null }) {
         <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_400px]">
           <div className="space-y-16">
             <EngineMeter status={status} phase={phase} />
+            <PriceHistory coinId={id} status={status} />
             <CurveChart status={status} />
             {ej && <EjectRecord status={status} />}
           </div>
@@ -135,7 +137,7 @@ function EjectRecord({ status }: { status: CoinStatus }) {
     <section>
       <div className="flex items-center justify-between gap-4 border-b border-line pb-4">
         <h2 className="label text-bone">
-          <span className="mr-3 text-muted">[03]</span>Eject record
+          <span className="mr-3 text-muted">[04]</span>Eject record
         </h2>
         <span className="label text-muted">{when}</span>
       </div>

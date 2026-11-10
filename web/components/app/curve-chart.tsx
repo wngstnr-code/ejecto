@@ -62,7 +62,7 @@ export function CurveChart({ status }: { status: CoinStatus }) {
   return (
     <section>
       <PanelTitle
-        n="02"
+        n="03"
         right={
           ejected ? (
             <span className="label text-muted">Frozen at eject</span>
