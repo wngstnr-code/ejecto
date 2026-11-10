@@ -1,9 +1,9 @@
 // Ejecto: 60-day agent simulation of a bonding-curve memecoin, baseline vs Ejecto.
 // Usage: node sim/ejecto-sim.mjs sim/out
 // This is a MODEL. Results are not market data. See docs/research.md for the summary and limits.
+// Imported as a module (sim/peak-rule-experiment.mjs) it only exports the model and writes nothing.
 import fs from 'node:fs';
-const OUT = process.argv[2] || 'sim/out';
-fs.mkdirSync(OUT, { recursive: true });
+import { pathToFileURL } from 'node:url';
 
 // ---------- RNG ----------
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
@@ -18,6 +18,10 @@ function tokensForNet(s, net) { // solve K/2 d^2 + (P0+K s) d - net = 0
 }
 
 const DAYS = 60, N = 400, WINDOW = 14, MIN_AGE = 14, ALIVE_FRAC = 0.05, ALIVE_MIN = 1; // alive if 14d buys >= 5% of peak 14d buys
+// How the peak window is measured. 'gross' (the contract): the best 14-day sum of buys.
+// 'net' (a tested alternative, see D-034): the best 14-day sum of buys minus sells.
+let PEAK_RULE = 'gross';
+export function setPeakRule(rule) { PEAK_RULE = rule; }
 
 function makeAgents(seed) {
   const r = mulberry32(seed);
@@ -40,10 +44,10 @@ class Market {
     this.mode = mode; this.s = 0; this.reserve = 0; this.fund = 0; this.protocol = 0;
     this.h = new Map(); // id -> {bal, basis, w, last, entryPrice}
     this.S = 0; this.W = 0; this.lastT = 0; // ejecto global accumulators
-    this.buys = new Array(DAYS + WINDOW + 30).fill(0);
+    this.buys = new Array(DAYS + WINDOW + 30).fill(0); this.sells = new Array(DAYS + WINDOW + 30).fill(0); this.curDay = 0;
     this.ejected = false; this.ejectDay = null; this.totalBuy = 0; this.totalSell = 0; this.peakWin = 0;
   }
-  clone() { const m = new Market(this.mode); Object.assign(m, this); m.h = new Map([...this.h].map(([k, v]) => [k, { ...v }])); m.buys = [...this.buys]; return m; }
+  clone() { const m = new Market(this.mode); Object.assign(m, this); m.h = new Map([...this.h].map(([k, v]) => [k, { ...v }])); m.buys = [...this.buys]; m.sells = [...this.sells]; return m; }
   holder(id) { if (!this.h.has(id)) this.h.set(id, { bal: 0, basis: 0, w: 0, last: 0, cash: 0 }); return this.h.get(id); }
   touch(h, t) { // accrue time-weighted positive basis
     this.W += this.S * (t - this.lastT); this.lastT = t;
@@ -67,12 +71,13 @@ class Market {
     const feeRate = this.mode === 'ejecto' ? FS : 0.01; const fee = gross * feeRate;
     if (this.mode === 'ejecto') this.fund += fee; else this.protocol += fee;
     this.s -= d; this.reserve -= gross; const proceeds = gross - fee;
-    h.bal -= d; h.cash += proceeds; this.totalSell += gross;
+    h.bal -= d; h.cash += proceeds; this.totalSell += gross; this.sells[this.curDay] += gross;
     let nb = h.basis - proceeds; if (h.bal <= 1e-9) { h.bal = 0; nb = 0; h.w = 0; } // left the ship: forfeit
     this.setBasis(h, nb); return proceeds;
   }
   windowBuys(day) { let v = 0; for (let d = Math.max(0, day - WINDOW + 1); d <= day; d++) v += this.buys[d]; return v; }
-  updPeak(day) { this.peakWin = Math.max(this.peakWin, this.windowBuys(day)); }
+  windowNet(day) { let v = 0; for (let d = Math.max(0, day - WINDOW + 1); d <= day; d++) v += this.buys[d] - this.sells[d]; return Math.max(0, v); }
+  updPeak(day) { this.peakWin = Math.max(this.peakWin, PEAK_RULE === 'net' ? this.windowNet(day) : this.windowBuys(day)); }
   canEject(day) { return this.mode === 'ejecto' && !this.ejected && day >= MIN_AGE && this.windowBuys(day) < Math.max(ALIVE_MIN, ALIVE_FRAC * this.peakWin); }
   // weighting: 'time' (Ejecto), 'basis', 'tokens'
   eject(day, weighting = 'time') {
@@ -94,10 +99,16 @@ class Market {
   raceExit(agents, t) { const ids = agents.filter(a => this.h.has(a.id) && this.h.get(a.id).bal > 0).sort((a, b) => a.order - b.order); for (const a of ids) this.sell(a.id, this.h.get(a.id).bal, t); }
 }
 
-function run(seed, mode, opts = {}) {
+// opts.weighting: fund weighting at EJECT. opts.grief: { day, x, hold } an attacker buys x NEAR on `day`
+// and sells it all `hold` days later (0 = the same day), to inflate the peak window.
+export function run(seed, mode, opts = {}) {
   const agents = makeAgents(seed); const m = new Market(mode); const series = [];
   const entry = new Map(); let snapBeforeEject = null;
   for (let day = 0; day < DAYS; day++) {
+    m.curDay = day;
+    const g = opts.grief, G = 777777;
+    if (g && day === g.day && !m.ejected) { const d = m.buy(G, g.x, day + 0.001, day); if (g.hold === 0) m.sell(G, d, day + 0.002); }
+    if (g && g.hold > 0 && day === g.day + g.hold && !m.ejected && m.h.has(G)) m.sell(G, m.h.get(G).bal, day + 0.001);
     const today = agents.map(a => ({ a, k: a.bored[day] })).sort((x, y) => x.k - y.k);
     for (const { a } of today) {
       const t = day + a.order;
@@ -116,7 +127,7 @@ function run(seed, mode, opts = {}) {
   return { m, pnl, series, snapBeforeEject, agents };
 }
 
-function stats(pnl) {
+export function stats(pnl) {
   const losers = pnl.filter(p => p.pnl < -1e-9);
   const lossSum = -losers.reduce((a, p) => a + p.pnl, 0);
   const invested = pnl.reduce((a, p) => a + p.inv, 0);
@@ -124,7 +135,12 @@ function stats(pnl) {
   return { traders: pnl.length, losers: losers.length, lossSum, invested, wiped };
 }
 
-// ---------- Monte Carlo ----------
+export { DAYS };
+
+// ---------- Monte Carlo (only when run directly) ----------
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+const OUT = process.argv[2] || 'sim/out';
+fs.mkdirSync(OUT, { recursive: true });
 const RUNS = 500; const agg = { base: [], ej: [], ejectDay: [], protocol: [], fundAtEject: [], volume: [] };
 for (let seed = 1; seed <= RUNS; seed++) {
   const b = run(seed, 'baseline'), e = run(seed, 'ejecto');
@@ -221,3 +237,4 @@ fs.writeFileSync(`${OUT}/example-series.json`, JSON.stringify({
 }, null, 1));
 fs.writeFileSync(`${OUT}/chart-example.svg`, chart1); fs.writeFileSync(`${OUT}/chart-attack.svg`, attackChart());
 console.log(JSON.stringify({ sens, summary, example: { ...example, series: undefined }, attacks, wash: washRes }, null, 2));
+}
