@@ -176,7 +176,7 @@ export function CoinsList() {
         </div>
 
         {/* table: scrolls inside the card, sideways on small screens */}
-        <div className={`overflow-auto ${expanded ? "flex-1" : "max-h-[68vh] min-h-[420px]"}`} data-lenis-prevent>
+        <div className={`overflow-auto ${expanded ? "flex-1" : "max-h-[68vh] md:min-h-[420px]"}`} data-lenis-prevent>
           <div className="md:min-w-[860px]">
             <div className={`label sticky top-0 z-10 grid ${COLS} items-center gap-x-5 border-b border-line bg-panel px-4 py-3 text-muted sm:px-5`}>
               <span>Coin</span>
