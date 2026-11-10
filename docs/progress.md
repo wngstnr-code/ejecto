@@ -87,6 +87,13 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 | 11 | Unit test gap: the `ft_transfer_call` refund path was never tested | medium | Tests with a mocked promise result (`resolve_with_unused`). |
 | 12 | Peak inflation griefing (found while thinking like an attacker) | medium | Not fixed, see Known issues. |
 
+## Review notes (2026-11-10, pre-submission)
+
+- Phone check at 390 px (Playwright, every page): the live landing scrolled sideways by 58 px (hero title too wide). Fixed: hero, Safeguards and The Math headings scale with the viewport, the crash readouts use a 2x2 grid, the crash stage text shows only the active stage, the 3D pilot shrinks away after the hero on phones so it never covers text, the Coins table becomes a two-column list (price and fund under the name), the demo banner is shortened. No horizontal overflow left on any page.
+- Hydration warning on Launch (dev only): the default coin art had float coordinates that differed in the last digit between server and browser. Rounded to 2 decimals.
+- Safeguards buttons now open the explorer pages that prove the claim: the coin's empty access key list and the factory's "Contract Source Code Verified" tab (checked in a browser).
+- Full check: coin 71 and factory 15 unit tests pass, web lint, type check and static build pass, CI green, dash check clean, no secrets or AI attribution in history, repo public with MIT detected by GitHub. On chain: all 3 coins have 0 access keys and code hash `4069f17f...`, matching the factory config and the verified source; contract code unchanged since the verified commit `7cedbe5`. README claims (fees, curve, wallet list, CLI output, tx hashes) checked against the spec and the chain.
+
 ## Known issues
 
 | Severity | Issue | Plan |
@@ -94,7 +101,6 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 | low | If the protocol account does not exist, `withdraw_protocol_fees` zeroes the counter and the failed transfer refunds the NEAR to the coin, where it is no longer tracked | The factory always sets a real account. Revisit after M3. |
 | low | The factory keeps a full-access key and an owner during the hackathon (D-017) | Launched coins are unaffected. Lock or hand over before any mainnet use. |
 | medium | Peak inflation griefing: a big buy followed by a sell raises `peak_window`, so 14 days later a still-active coin can fall below 5% of the fake peak and be ejected | Costly (about 4% of the fake peak, most of it paid into the fund) and nobody can steal anything, since holders get a fair pro-rata exit. Possible later fix: let the peak decay over time. |
-| low | Landing and app pages not yet checked on phone widths. The 3D layer has narrow-screen poses but no real-device test | Check before recording the demo. |
 | low | Wallets that redirect instead of using a popup reload the page, so the in-page success message is lost (the data still refreshes from chain) | Acceptable for the demo. Meteor and Intear use popups. |
 | low | `web/public/mascot/ejecto-pilot.glb` and `ejecto-pilot-wave.glb` are 2.4 MB each, most of it one PNG texture | Fine for the demo. Could convert the textures to WebP to cut them about in half. |
 | low | The waving model has no rig, so the wave is a vertex shader on one fused mesh. The glove touches the helmet in the source pose, so the arm keeps a small outward lean | Looks clean at the greeting size. A rigged model would allow a real wave. |
