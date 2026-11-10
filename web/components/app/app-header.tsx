@@ -87,7 +87,7 @@ function WalletButton() {
         >
           {ready ? "Connect wallet" : "Loading..."}
         </button>
-        {error && <p className="label absolute right-0 top-full mt-2 w-64 text-right text-eject">{error}</p>}
+        {error && <p className="label absolute right-0 top-full z-20 mt-2 w-64 text-right text-eject">{error}</p>}
       </div>
     );
   }
@@ -113,7 +113,7 @@ function WalletButton() {
         <span className="hidden sm:inline">{shortAccount(accountId, 20)}</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-60 overflow-hidden rounded-xl border border-line bg-panel">
+        <div className="absolute right-0 top-full z-20 mt-2 w-60 overflow-hidden rounded-xl border border-line bg-panel shadow-2xl shadow-black/60">
           <div className="label border-b border-line px-4 py-3 text-muted">
             {walletInfo ? `${walletInfo.name}, ` : ""}
             {NETWORK}
