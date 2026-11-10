@@ -92,6 +92,7 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 - 468 public submissions (nearhackathon.com API); Memecoins With Mechanics has 28, the fewest of all tracks; Social Money has 44.
 - Closest: LIFO (pays the newest buyers first in a crash, uses a server Worker for demo signing and settle), Tripwire (keyless rug-proof launchpad). No other entry ends a dead coin with a pro-rata snapshot plus a loyalty fund.
 - Gaps closed: on-chain log on the coin page (D-032); README "For judges" table, track prompt answers, sybil section tied to tests, "How Ejecto differs".
+- Added a keyless chain check (`node scripts/verify-chain.mjs`, all 26 checks pass on testnet) with a 6-hourly workflow, and simulation charts in the README (D-033). Considered and deferred: fixing peak inflation griefing with a net-buy peak (needs a v2 coin code, a new reproducible build and verification; existing coins stay v1 because they are immutable).
 
 ## Review notes (2026-11-10, pre-submission)
 
