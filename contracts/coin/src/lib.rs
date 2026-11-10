@@ -5,6 +5,7 @@
 //! - `accounting`: holder net basis x time (spec section 6)
 //! - `detector`: alive detector (spec section 7)
 //! - `events`: NEP-297 events
+//! - Mayday (spec section 10): crowd rescue of a dying coin, in this file
 
 use near_contract_standards::fungible_token::events::{FtBurn, FtMint};
 use near_contract_standards::fungible_token::metadata::{
@@ -28,7 +29,7 @@ pub mod curve;
 pub mod detector;
 mod events;
 
-use accounting::{claim_parts, moved_basis, Holder, Ledger};
+use accounting::{claim_parts, moved_basis, scaled, Holder, Ledger};
 use detector::Detector;
 
 use curve::{price_at, proceeds_of_burn, reserve_at, tokens_for_net};
@@ -45,11 +46,26 @@ pub const DECIMALS: u8 = 18;
 pub const MIN_DAY_LENGTH: u64 = 10;
 pub const REAL_DAY: u64 = 86_400;
 
+// Mayday (spec section 10). Durations are in coin days.
+/// How long a Mayday stays open.
+pub const MAYDAY_DAYS: u64 = 3;
+/// After a failed Mayday, the next one may open this many days after its deadline.
+pub const MAYDAY_COOLDOWN_DAYS: u64 = 7;
+/// The target is at most this many times the alive line.
+pub const MAYDAY_MAX_TARGET_X: u128 = 3;
+/// The opener pledges at least this share of the target (basis points).
+pub const MAYDAY_OPENER_BPS: u128 = 1_000;
+/// On a rescue the fund adds this share of the pledges (basis points)...
+pub const COINVEST_BPS: u128 = 2_500;
+/// ...but never more than this share of the fund (basis points).
+pub const COINVEST_FUND_MAX_BPS: u128 = 5_000;
+
 #[derive(BorshStorageKey)]
 #[near]
 enum StorageKey {
     Token,
     Holders,
+    Rounds,
 }
 
 #[near(serializers = [json, borsh])]
@@ -104,6 +120,40 @@ pub struct Coin {
 
     // terminal state (spec section 8)
     ejected: Option<EjectSnapshot>,
+    // Mayday (spec section 10)
+    mayday: Option<Mayday>,
+    rounds: LookupMap<u32, Round>,
+    round_count: u32,
+    rescues: u32,
+    /// A new Mayday may open from this time on (end of the cooldown after a failed one).
+    mayday_open_after_ts: u64,
+    /// NEAR held for pledges that are neither filled nor withdrawn.
+    pledges_held: u128,
+}
+
+/// The open Mayday round.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Mayday {
+    pub round: u32,
+    pub opener: AccountId,
+    pub target: U128,
+    pub pledged: U128,
+    pub opened_ts: u64,
+    pub deadline_ts: u64,
+}
+
+/// A closed Mayday round. For a rescue, what is still in escrow for the pledgers who did not collect.
+#[near(serializers = [borsh, json])]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Round {
+    pub rescued: bool,
+    /// Rescue (or failure) time.
+    pub ts: u64,
+    /// Rescue tokens still in escrow.
+    pub tokens_left: U128,
+    /// Pledges of this round not yet collected (rescue) or withdrawn (failure).
+    pub pledges_left: U128,
 }
 
 /// Frozen numbers at EJECT. Claims are computed from these.
@@ -130,8 +180,16 @@ pub struct HolderView {
     pub total_weight: U128,
     pub claimed: bool,
     /// Payout if EJECT happened now (before EJECT), or the actual claimable payout (after).
+    /// Includes rescue tokens still waiting in escrow.
     pub reserve_part: U128,
     pub fund_part: U128,
+    /// NEAR pledged to a Mayday and not yet filled or withdrawn.
+    pub pledge: U128,
+    pub pledge_round: u32,
+    /// "open", "rescued" (tokens waiting to be collected), "failed" (withdraw the pledge) or "none".
+    pub pledge_state: String,
+    /// Rescue tokens waiting in escrow for this account.
+    pub collectable: U128,
 }
 
 /// Fee and output breakdown of a buy. Used by `buy` and `quote_buy`.
@@ -181,9 +239,20 @@ pub struct Status {
     pub window_buys: U128,
     pub peak_window: U128,
     pub alive_threshold: U128,
+    /// True when EJECT would succeed now (no Mayday open).
     pub ejectable: bool,
     pub total_weight: U128,
     pub ejected: Option<EjectSnapshot>,
+    /// The open Mayday, if any (one past its deadline is shown until a call closes it).
+    pub mayday: Option<Mayday>,
+    /// True when a Mayday could be opened now.
+    pub can_mayday: bool,
+    /// End of the cooldown after a failed Mayday (0 when there is none).
+    pub mayday_open_after_ts: u64,
+    /// Successful rescues so far.
+    pub rescues: u32,
+    /// NEAR held for open or unwithdrawn pledges.
+    pub pledges_held: U128,
 }
 
 /// Rounds `amount * bps / BPS` up (fees always round in favor of the contract).
@@ -258,8 +327,16 @@ impl Coin {
             ledger: Ledger::new(now),
             detector: Detector::default(),
             ejected: None,
+            mayday: None,
+            rounds: LookupMap::new(StorageKey::Rounds),
+            round_count: 0,
+            rescues: 0,
+            mayday_open_after_ts: 0,
+            pledges_held: 0,
         };
         this.include_holder_storage();
+        // The coin account itself holds the Mayday rescue escrow, so it needs a token account.
+        this.token.internal_register_account(&me);
         this
     }
 
@@ -276,6 +353,7 @@ impl Coin {
             "Register first: call storage_deposit"
         );
         let amount = env::attached_deposit().as_yoctonear();
+        self.settle(&buyer);
         let q = self.compute_buy(amount);
         let tokens = q.tokens_out.0;
         require!(tokens > 0, "Buy too small for any tokens");
@@ -319,6 +397,7 @@ impl Coin {
         let seller = env::predecessor_account_id();
         let d = amount.0;
         require!(d > 0, "Amount must be positive");
+        self.settle(&seller);
         let balance = self.token.ft_balance_of(seller.clone()).0;
         require!(d <= balance, "Not enough tokens");
         let q = self.compute_sell(d);
@@ -385,6 +464,11 @@ impl Coin {
             self.detector.window_buys(day) < self.detector.alive_threshold(),
             "The coin is still alive"
         );
+        self.close_mayday_if_expired(now);
+        require!(
+            self.mayday.is_none(),
+            "A Mayday is open: EJECT waits until it ends"
+        );
         self.ledger.touch_global(now);
         let supply = self.token.total_supply;
         if supply == 0 && self.fund > 0 {
@@ -412,6 +496,7 @@ impl Coin {
             .clone()
             .unwrap_or_else(|| env::panic_str("Not ejected yet"));
         let account = env::predecessor_account_id();
+        self.settle(&account);
         let balance = self.token.ft_balance_of(account.clone()).0;
         require!(balance > 0, "Nothing to claim");
         let mut h = self.holder_or_default(&account);
@@ -461,6 +546,117 @@ impl Coin {
         U128(payout)
     }
 
+    // ---------- Mayday (spec section 10) ----------
+
+    /// Opens a Mayday on a coin that EJECT could end now. The attached NEAR is the opener's pledge,
+    /// at least 10% of `target`. The target is between the alive line and 3 times it.
+    #[payable]
+    pub fn mayday(&mut self, target: U128) -> Mayday {
+        self.assert_live();
+        let opener = env::predecessor_account_id();
+        let now = now_sec();
+        self.close_mayday_if_expired(now);
+        require!(self.mayday.is_none(), "A Mayday is already open");
+        require!(
+            now >= self.mayday_open_after_ts,
+            "Cooldown: a failed Mayday ended less than 7 days ago"
+        );
+        require!(
+            self.detector.ejectable(self.day_at(now)),
+            "A Mayday can only be called when the coin could be ejected"
+        );
+        let line = self.detector.alive_threshold();
+        let t = target.0;
+        require!(
+            t >= line && t <= line * MAYDAY_MAX_TARGET_X,
+            "Target must be between the alive line and 3 times it"
+        );
+        let amount = env::attached_deposit().as_yoctonear();
+        require!(
+            amount >= fee_up(t, MAYDAY_OPENER_BPS),
+            "The opener pledges at least 10% of the target"
+        );
+        self.round_count += 1;
+        let round = self.round_count;
+        let m = Mayday {
+            round,
+            opener: opener.clone(),
+            target,
+            pledged: U128(0),
+            opened_ts: now,
+            deadline_ts: now + MAYDAY_DAYS * self.day_length_sec,
+        };
+        self.mayday = Some(m.clone());
+        events::mayday_open(round, &opener, t, m.deadline_ts);
+        self.add_pledge(&opener, amount, now);
+        self.mayday.clone().unwrap_or(m)
+    }
+
+    /// Pledges the attached NEAR to the open Mayday. The pledge that reaches the target executes
+    /// the rescue in the same call.
+    #[payable]
+    pub fn pledge(&mut self) -> U128 {
+        self.assert_live();
+        let account = env::predecessor_account_id();
+        let now = now_sec();
+        self.close_mayday_if_expired(now);
+        require!(self.mayday.is_some(), "No Mayday is open");
+        let amount = env::attached_deposit().as_yoctonear();
+        self.add_pledge(&account, amount, now);
+        U128(self.holder_or_default(&account).pledge)
+    }
+
+    /// Moves the caller's share of a rescue from the escrow to their account: tokens, plus the
+    /// pledge as basis and the weight it earned since the rescue. Returns the tokens moved.
+    pub fn collect(&mut self) -> U128 {
+        let account = env::predecessor_account_id();
+        let moved = self.settle(&account);
+        require!(moved > 0, "Nothing to collect");
+        U128(moved)
+    }
+
+    /// Returns the caller's pledge in full after a failed Mayday. Returns the NEAR sent.
+    pub fn withdraw_pledge(&mut self) -> U128 {
+        let account = env::predecessor_account_id();
+        let now = now_sec();
+        if self.ejected.is_none() {
+            self.close_mayday_if_expired(now);
+        }
+        let mut h = self.holder_or_default(&account);
+        require!(h.pledge > 0, "No pledge to withdraw");
+        let round_id = h.pledge_round;
+        if let Some(m) = &self.mayday {
+            require!(
+                m.round != round_id,
+                "Pledges are locked until the Mayday ends"
+            );
+        }
+        let mut round = self
+            .rounds
+            .get(&round_id)
+            .cloned()
+            .unwrap_or_else(|| env::panic_str("Unknown Mayday round"));
+        require!(!round.rescued, "This Mayday succeeded: collect your tokens instead");
+        let amount = h.pledge;
+        // effects before the outgoing transfer
+        h.pledge = 0;
+        h.pledge_round = 0;
+        self.holders.insert(account.clone(), h);
+        round.pledges_left = U128(round.pledges_left.0 - amount);
+        self.rounds.insert(round_id, round);
+        self.pledges_held -= amount;
+        events::pledge_withdraw(round_id, &account, amount);
+        Promise::new(account)
+            .transfer(NearToken::from_yoctonear(amount))
+            .detach();
+        U128(amount)
+    }
+
+    /// A closed Mayday round (rescued or failed), with what is still in escrow or still pledged.
+    pub fn get_round(&self, round: u32) -> Option<Round> {
+        self.rounds.get(&round).cloned()
+    }
+
     pub fn holder(&self, account_id: AccountId) -> HolderView {
         let balance = self.token.ft_balance_of(account_id.clone()).0;
         let h = self.holders.get(&account_id).cloned().unwrap_or_default();
@@ -477,9 +673,20 @@ impl Coin {
                 )
             }
         };
-        let weight = Ledger::live_weight(&h, t);
-        let (reserve_part, mut fund_part) =
-            claim_parts(reserve_e, supply_e, fund_e, w_total, balance, weight);
+        // Rescue tokens still in escrow count as this holder's, with the weight they earned.
+        let (collectable, escrow_weight, state) = match self.pledge_view(&h, t) {
+            Some((tokens, dw, state)) => (tokens, dw, state),
+            None => (0, 0, if h.pledge > 0 { "open" } else { "none" }),
+        };
+        let weight = Ledger::live_weight(&h, t) + escrow_weight;
+        let (reserve_part, mut fund_part) = claim_parts(
+            reserve_e,
+            supply_e,
+            fund_e,
+            w_total,
+            balance + collectable,
+            weight,
+        );
         if h.claimed {
             fund_part = 0;
         }
@@ -491,6 +698,10 @@ impl Coin {
             claimed: h.claimed,
             reserve_part: U128(reserve_part),
             fund_part: U128(fund_part),
+            pledge: U128(h.pledge),
+            pledge_round: h.pledge_round,
+            pledge_state: state.to_string(),
+            collectable: U128(collectable),
         }
     }
 
@@ -531,13 +742,221 @@ impl Coin {
             window_buys: U128(self.detector.window_buys(day)),
             peak_window: U128(self.detector.peak_window),
             alive_threshold: U128(self.detector.alive_threshold()),
-            ejectable: self.ejected.is_none() && self.detector.ejectable(day),
+            ejectable: self.ejected.is_none()
+                && self.detector.ejectable(day)
+                && !self.mayday_blocks(now),
             total_weight: U128(match &self.ejected {
                 Some(e) => e.w_e.0,
                 None => self.ledger.live_total(now),
             }),
             ejected: self.ejected.clone(),
+            mayday: self.mayday.clone(),
+            can_mayday: self.ejected.is_none()
+                && self.detector.ejectable(day)
+                && self.mayday.is_none()
+                && now >= self.mayday_open_after_ts,
+            mayday_open_after_ts: self.effective_open_after(),
+            rescues: self.rescues,
+            pledges_held: U128(self.pledges_held),
         }
+    }
+
+    // ---------- Mayday internals ----------
+
+    /// True when a Mayday is open and still before its deadline (it blocks EJECT).
+    fn mayday_blocks(&self, now: u64) -> bool {
+        self.mayday.as_ref().is_some_and(|m| now < m.deadline_ts)
+    }
+
+    /// End of the cooldown, counting a Mayday that is past its deadline but not closed yet.
+    fn effective_open_after(&self) -> u64 {
+        match &self.mayday {
+            Some(m) => m.deadline_ts + MAYDAY_COOLDOWN_DAYS * self.day_length_sec,
+            None => self.mayday_open_after_ts,
+        }
+    }
+
+    fn mayday_expired(&self, now: u64) -> bool {
+        self.mayday.as_ref().is_some_and(|m| now >= m.deadline_ts)
+    }
+
+    /// Closes the open Mayday as failed when its deadline has passed below the target.
+    fn close_mayday_if_expired(&mut self, now: u64) {
+        let Some(m) = self.mayday.clone() else { return };
+        if now < m.deadline_ts {
+            return;
+        }
+        self.rounds.insert(
+            m.round,
+            Round {
+                rescued: false,
+                ts: m.deadline_ts,
+                tokens_left: U128(0),
+                pledges_left: m.pledged,
+            },
+        );
+        self.mayday = None;
+        self.mayday_open_after_ts = m.deadline_ts + MAYDAY_COOLDOWN_DAYS * self.day_length_sec;
+        events::mayday_fail(m.round, m.pledged.0, m.target.0);
+    }
+
+    /// Adds `amount` to `account`'s pledge in the open round, and rescues when the target is met.
+    fn add_pledge(&mut self, account: &AccountId, amount: u128, now: u64) {
+        require!(amount >= MIN_BUY, "Minimum pledge is 0.001 NEAR");
+        require!(
+            self.token.accounts.contains_key(account),
+            "Register first: call storage_deposit"
+        );
+        self.settle(account);
+        let mut m = self.mayday.clone().unwrap_or_else(|| env::panic_str("No Mayday is open"));
+        let mut h = self.holder_or_default(account);
+        require!(
+            h.pledge == 0 || h.pledge_round == m.round,
+            "Withdraw your pledge from the earlier Mayday first"
+        );
+        h.pledge += amount;
+        h.pledge_round = m.round;
+        self.holders.insert(account.clone(), h);
+        m.pledged = U128(m.pledged.0 + amount);
+        self.pledges_held += amount;
+        events::pledge(m.round, account, amount, m.pledged.0);
+        let reached = m.pledged.0 >= m.target.0;
+        self.mayday = Some(m);
+        if reached {
+            self.rescue(now);
+        }
+    }
+
+    /// Executes the rescue: all pledges as one buy at one price, plus the fund's co-invest.
+    /// The tokens go to the escrow (the coin account); pledgers collect their share later.
+    fn rescue(&mut self, now: u64) {
+        let m = self.mayday.take().unwrap_or_else(|| env::panic_str("No Mayday is open"));
+        let pledged = m.pledged.0;
+        let fund_fee = fee_up(pledged, self.fund_buy_bps as u128);
+        let protocol_fee = fee_up(pledged, PROTOCOL_BUY_BPS);
+        self.fund += fund_fee;
+        self.protocol_fees += protocol_fee;
+        let coinvest = (pledged * COINVEST_BPS / BPS).min(self.fund * COINVEST_FUND_MAX_BPS / BPS);
+        self.fund -= coinvest;
+        let net = pledged - fund_fee - protocol_fee + coinvest;
+        let s = self.token.total_supply;
+        let (tokens, cost) = tokens_for_net(s, net);
+        require!(
+            s + tokens < curve::MAX_SUPPLY || net == cost,
+            "Rescue would exceed the supply cap"
+        );
+        require!(tokens > 0, "Rescue too small for any tokens");
+        self.reserve += cost;
+        self.fund += net - cost;
+        let me = env::current_account_id();
+        self.token.internal_deposit(&me, tokens);
+        debug_assert_eq!(self.reserve, reserve_at(self.token.total_supply));
+
+        // The escrow is one holder whose basis is the uncollected pledges.
+        let mut e = self.holder_or_default(&me);
+        self.ledger.touch(&mut e, now);
+        let nb = e.basis + pledged as i128;
+        self.ledger.set_basis(&mut e, nb);
+        self.holders.insert(me.clone(), e);
+        // The rescue is a buy of the pledged amount for the alive detector.
+        self.detector.record_buy(self.day_at(now), pledged);
+        self.rounds.insert(
+            m.round,
+            Round {
+                rescued: true,
+                ts: now,
+                tokens_left: U128(tokens),
+                pledges_left: U128(pledged),
+            },
+        );
+        self.pledges_held -= pledged;
+        self.rescues += 1;
+        FtMint {
+            owner_id: &me,
+            amount: U128(tokens),
+            memo: Some("ejecto mayday rescue"),
+        }
+        .emit();
+        events::rescue(m.round, pledged, coinvest, tokens, price_at(self.token.total_supply));
+    }
+
+    /// The tokens and weight waiting in escrow for `h`, as of `t`, and its pledge state.
+    fn pledge_view(&self, h: &Holder, t: u64) -> Option<(u128, u128, &'static str)> {
+        if h.pledge == 0 || h.pledge_round == 0 {
+            return None;
+        }
+        if self.mayday.as_ref().is_some_and(|m| m.round == h.pledge_round) {
+            let expired = self.mayday_expired(env::block_timestamp() / 1_000_000_000);
+            return Some((0, 0, if expired { "failed" } else { "open" }));
+        }
+        let r = self.rounds.get(&h.pledge_round)?;
+        if !r.rescued {
+            return Some((0, 0, "failed"));
+        }
+        let (tokens, dw) = Self::share_of(r, h.pledge, t);
+        Some((tokens, dw, "rescued"))
+    }
+
+    /// A pledger's slice of a rescued round: tokens (the last one takes the rest) and the weight
+    /// their pledge earned between the rescue and `t`.
+    fn share_of(r: &Round, pledge: u128, t: u64) -> (u128, u128) {
+        let tokens = if pledge >= r.pledges_left.0 {
+            r.tokens_left.0
+        } else {
+            use curve::U512;
+            (U512::from(r.tokens_left.0) * U512::from(pledge) / U512::from(r.pledges_left.0)).low_u128()
+        };
+        let dw = scaled(pledge as i128) * t.saturating_sub(r.ts) as u128;
+        (tokens, dw)
+    }
+
+    /// Collects `account`'s rescue tokens from the escrow if a rescue filled their pledge.
+    /// Runs before every action of a holder, so nobody has to remember to collect. Returns tokens moved.
+    fn settle(&mut self, account: &AccountId) -> u128 {
+        let mut h = self.holder_or_default(account);
+        if h.pledge == 0 || h.pledge_round == 0 {
+            return 0;
+        }
+        let rid = h.pledge_round;
+        let Some(mut r) = self.rounds.get(&rid).cloned() else { return 0 };
+        if !r.rescued {
+            return 0;
+        }
+        let me = env::current_account_id();
+        let now = now_sec();
+        // After EJECT the weights are frozen at t_e.
+        let t = self.ejected.as_ref().map_or(now, |e| e.t_e);
+        let pledge = h.pledge;
+        let (tokens, dw) = Self::share_of(&r, pledge, t);
+        let mut e = self.holder_or_default(&me);
+        if self.ejected.is_none() {
+            self.ledger.touch(&mut e, now);
+            self.ledger.touch(&mut h, now);
+        } else {
+            e.weight = Ledger::live_weight(&e, t);
+            e.last_ts = e.last_ts.max(t);
+            h.weight = Ledger::live_weight(&h, t);
+            h.last_ts = h.last_ts.max(t);
+        }
+        let dw = dw.min(e.weight);
+        e.weight -= dw;
+        h.weight += dw;
+        let (eb, hb) = (e.basis - pledge as i128, h.basis + pledge as i128);
+        self.ledger.set_basis(&mut e, eb);
+        self.ledger.set_basis(&mut h, hb);
+        h.pledge = 0;
+        h.pledge_round = 0;
+        r.tokens_left = U128(r.tokens_left.0 - tokens);
+        r.pledges_left = U128(r.pledges_left.0 - pledge);
+        self.rounds.insert(rid, r);
+        self.holders.insert(me.clone(), e);
+        self.holders.insert(account.clone(), h);
+        if tokens > 0 {
+            self.token.internal_withdraw(&me, tokens);
+            self.token.internal_deposit(account, tokens);
+        }
+        events::collect(rid, account, pledge, tokens);
+        tokens
     }
 
     // ---------- internal ----------
@@ -569,6 +988,8 @@ impl Coin {
                 weight: u128::MAX,
                 last_ts: u64::MAX,
                 claimed: true,
+                pledge: u128::MAX,
+                pledge_round: u32::MAX,
             },
         );
         self.holders.flush();
@@ -648,7 +1069,12 @@ impl FungibleTokenCore for Coin {
     #[payable]
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>) {
         self.assert_live();
+        require!(
+            receiver_id != env::current_account_id(),
+            "The coin account holds the rescue escrow and cannot receive tokens"
+        );
         let sender = env::predecessor_account_id();
+        self.settle(&sender);
         let balance = self.token.ft_balance_of(sender.clone()).0;
         require!(
             amount.0 > 0 && amount.0 <= balance,
@@ -667,6 +1093,11 @@ impl FungibleTokenCore for Coin {
         msg: String,
     ) -> PromiseOrValue<U128> {
         self.assert_live();
+        require!(
+            receiver_id != env::current_account_id(),
+            "The coin account holds the rescue escrow and cannot receive tokens"
+        );
+        self.settle(&env::predecessor_account_id());
         // No accounting here: the tokens are in flight. `ft_resolve_transfer` books only the
         // part the receiver kept, as a transfer from the sender's own basis.
         self.token.ft_transfer_call(receiver_id, amount, memo, msg)
@@ -734,6 +1165,10 @@ impl StorageManagement for Coin {
             "Forced unregister is disabled. Sell your tokens first."
         );
         let account = env::predecessor_account_id();
+        require!(
+            self.holder_or_default(&account).pledge == 0,
+            "Collect or withdraw your Mayday pledge first"
+        );
         let removed = self.token.storage_unregister(Some(false));
         if removed {
             // Zero balance means the holder already left the ship (basis and weight are 0).

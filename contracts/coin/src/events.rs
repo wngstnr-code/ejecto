@@ -1,4 +1,4 @@
-//! Ejecto NEP-297 events. Standard "ejecto", version "1.0.0".
+//! Ejecto NEP-297 events. Standard "ejecto", version "1.1.0" (1.1 adds the Mayday events).
 //! Token mint and burn also emit the standard NEP-141 events (FtMint, FtBurn).
 
 use crate::{BuyQuote, EjectSnapshot, SellQuote};
@@ -8,7 +8,7 @@ use near_sdk::{env, AccountId};
 fn emit(event: &str, data: near_sdk::serde_json::Value) {
     let payload = json!({
         "standard": "ejecto",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "event": event,
         "data": [data],
     });
@@ -63,5 +63,55 @@ pub fn claim(account: &AccountId, tokens_burned: u128, reserve_part: u128, fund_
             "reserve_part": reserve_part.to_string(),
             "fund_part": fund_part.to_string(),
         }),
+    );
+}
+
+// ---------- Mayday (spec section 10) ----------
+
+pub fn mayday_open(round: u32, opener: &AccountId, target: u128, deadline_ts: u64) {
+    emit(
+        "ejecto_mayday_open",
+        json!({ "round": round, "opener": opener, "target": target.to_string(), "deadline_ts": deadline_ts }),
+    );
+}
+
+pub fn pledge(round: u32, account: &AccountId, amount: u128, pledged: u128) {
+    emit(
+        "ejecto_pledge",
+        json!({ "round": round, "account_id": account, "amount": amount.to_string(), "pledged": pledged.to_string() }),
+    );
+}
+
+pub fn rescue(round: u32, pledged: u128, coinvest: u128, tokens: u128, price_after: u128) {
+    emit(
+        "ejecto_rescue",
+        json!({
+            "round": round,
+            "pledged": pledged.to_string(),
+            "coinvest": coinvest.to_string(),
+            "tokens": tokens.to_string(),
+            "price_after": price_after.to_string(),
+        }),
+    );
+}
+
+pub fn mayday_fail(round: u32, pledged: u128, target: u128) {
+    emit(
+        "ejecto_mayday_fail",
+        json!({ "round": round, "pledged": pledged.to_string(), "target": target.to_string() }),
+    );
+}
+
+pub fn collect(round: u32, account: &AccountId, pledge: u128, tokens: u128) {
+    emit(
+        "ejecto_collect",
+        json!({ "round": round, "account_id": account, "pledge": pledge.to_string(), "tokens": tokens.to_string() }),
+    );
+}
+
+pub fn pledge_withdraw(round: u32, account: &AccountId, amount: u128) {
+    emit(
+        "ejecto_pledge_withdraw",
+        json!({ "round": round, "account_id": account, "amount": amount.to_string() }),
     );
 }

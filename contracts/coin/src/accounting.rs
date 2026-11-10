@@ -23,6 +23,10 @@ pub struct Holder {
     pub last_ts: u64,
     /// True once the holder claimed after EJECT.
     pub claimed: bool,
+    /// NEAR pledged to a Mayday and not yet filled or withdrawn (spec section 10).
+    pub pledge: u128,
+    /// The Mayday round of `pledge` (0 when there is no pledge).
+    pub pledge_round: u32,
 }
 
 /// Global accounting totals.
