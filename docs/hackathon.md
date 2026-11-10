@@ -66,7 +66,7 @@ Total $250,000, fixed in USD, paid in NEAR to the account given in the form. Pai
 - [x] Hosted demo on Vercel, working with testnet (https://ejecto.vercel.app)
 - [ ] Demo video (about 3 minutes)
 - [x] X post: built at NEAR HACKATHON, tags @NEARProtocol and #NEARHackathon, video attached, NEAR's role explained concretely (posted by the user): https://x.com/Dudung_gg/status/2120172645438374353
-- [ ] Form submitted with tracks memecoins and social (by the user)
+- [ ] Form submitted with the memecoins track only (by the user; decided 2026-11-11 to focus on Memecoins With Mechanics, since Social Money expects Sputnik DAO or Trezu)
 - [ ] Everything done before 2026-11-14 23:59 UTC
 
 ## 7. Demo script (about 3 minutes)
