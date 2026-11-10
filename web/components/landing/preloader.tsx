@@ -43,6 +43,9 @@ export function Preloader() {
       return;
     }
 
+    // The greeting is staged for the hero: start at the top even after a reload mid page.
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    window.scrollTo(0, 0);
     pilotScroll.appear = 0;
     pilotScroll.intro = 0;
     html.dataset.intro = "on";
