@@ -15,13 +15,17 @@ const PAD = { l: 8, r: 8, t: 18, b: 8 };
  * Price over time, rebuilt from the chain: every buy and sell moves the supply, and the fixed curve turns
  * the supply into a price. Refreshes whenever the live supply changes, so new trades appear at the right edge.
  */
-export function PriceHistory({ coinId, status }: { coinId: string; status: CoinStatus }) {
+/**
+ * Loads the coin's chain history once for the price chart and the on-chain log. Reloads when the coin's
+ * state changes: supply moves on a trade, reserve and fund move on EJECT and on every claim.
+ */
+export function useCoinHistory(coinId: string, status: CoinStatus | null) {
   const [history, setHistory] = useState<History | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const supplyKey = status.ejected ? `e${status.ejected.t_e}` : status.supply;
+  const key = status ? `${status.supply}|${status.reserve}|${status.fund}|${status.ejected?.t_e ?? ""}` : "";
 
-  // Reload when the on-chain supply changes (a new trade). The first load also runs here.
   useEffect(() => {
+    if (!key) return;
     const ctrl = new AbortController();
     loadHistory(coinId, ctrl.signal)
       .then((h) => {
@@ -32,7 +36,12 @@ export function PriceHistory({ coinId, status }: { coinId: string; status: CoinS
         if (!ctrl.signal.aborted) setError(e instanceof Error ? e.message : "History error");
       });
     return () => ctrl.abort();
-  }, [coinId, supplyKey]);
+  }, [coinId, key]);
+
+  return { history, error };
+}
+
+export function PriceHistory({ status, history, error }: { status: CoinStatus; history: History | null; error: string | null }) {
 
   const ejected = !!status.ejected;
   const startMs = status.launch_ts * 1000;

@@ -10,7 +10,8 @@ import { accessKeyCount, type CoinStatus } from "@/lib/near";
 import { prefersReducedMotion } from "@/lib/gsap";
 import { useWallet } from "@/lib/wallet";
 import { CurveChart } from "./curve-chart";
-import { PriceHistory } from "./price-history";
+import { ActivityLog } from "./activity-log";
+import { PriceHistory, useCoinHistory } from "./price-history";
 import { EngineMeter } from "./engine-meter";
 import { ClaimPanel, EjectPanel, SeatPanel } from "./seat-panels";
 import { TradePanel } from "./trade-panel";
@@ -28,6 +29,8 @@ export function CoinView({ id }: { id: string | null }) {
   const valid = validCoinId(id);
   const { accountId } = useWallet();
   const { status, holder, meta, error, refresh } = useCoin(valid ? id : null, accountId);
+  // One chain history load feeds both the price chart and the on-chain log (hooks run before any early return).
+  const chain = useCoinHistory(valid && id ? id : "", status ?? null);
   const [keys, setKeys] = useState<number | null>(null);
   const [celebrate, setCelebrate] = useState(false);
   const endCelebrate = useCallback(() => setCelebrate(false), []);
@@ -104,9 +107,10 @@ export function CoinView({ id }: { id: string | null }) {
         <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_400px]">
           <div className="space-y-16">
             <EngineMeter status={status} phase={phase} />
-            <PriceHistory coinId={id} status={status} />
+            <PriceHistory status={status} history={chain.history} error={chain.error} />
             <CurveChart status={status} />
             {ej && <EjectRecord status={status} />}
+            <ActivityLog n={ej ? "05" : "04"} history={chain.history} error={chain.error} />
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">

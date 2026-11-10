@@ -20,7 +20,23 @@ export type Trade = {
   hash: string;
 };
 
-export type History = { trades: Trade[]; ejectAt: number | null };
+/** One line of the on-chain log: every buy, sell, EJECT and claim, read from the contract's own events. */
+export type LogEntry = {
+  /** Unix time in ms (block time of the transaction). */
+  t: number;
+  kind: "buy" | "sell" | "eject" | "claim";
+  account: string;
+  /** buy: NEAR paid in. sell: NEAR received. eject: reserve frozen. claim: total paid out. */
+  near: number;
+  /** buy and sell: fee paid into the Ejecto Fund. eject: fund frozen. claim: fund share paid. */
+  fund: number;
+  /** claim only: the reserve share paid. */
+  reserve: number;
+  tokens: number;
+  hash: string;
+};
+
+export type History = { trades: Trade[]; log: LogEntry[]; ejectAt: number | null };
 
 type TxRow = {
   transaction_hash: string;
@@ -30,11 +46,11 @@ type TxRow = {
   outcomes: { status: boolean | null };
 };
 
-type TradeEvent = { kind: "buy" | "sell"; account: string; near: number; tokens: number };
+type ChainEvent = Omit<LogEntry, "t" | "hash">;
 
 const MAX_PAGES = 5;
 // Parsed trades per transaction never change, so they are cached for the whole session.
-const eventCache = new Map<string, TradeEvent[]>();
+const eventCache = new Map<string, ChainEvent[]>();
 
 /** All transactions sent to the coin account, oldest first (NearBlocks v3, cursor pagination). */
 async function listTxns(coinId: string, signal?: AbortSignal): Promise<TxRow[]> {
@@ -73,8 +89,8 @@ async function rpcTx(url: string, hash: string, sender: string, signal?: AbortSi
   return json.result;
 }
 
-/** The ejecto_buy / ejecto_sell events a transaction emitted (from its receipt logs). */
-async function tradeEvents(row: TxRow, signal?: AbortSignal): Promise<TradeEvent[]> {
+/** The ejecto_* events (buy, sell, eject, claim) a transaction emitted, from its receipt logs. */
+async function chainEvents(row: TxRow, signal?: AbortSignal): Promise<ChainEvent[]> {
   const cached = eventCache.get(row.transaction_hash);
   if (cached) return cached;
   let result;
@@ -84,7 +100,8 @@ async function tradeEvents(row: TxRow, signal?: AbortSignal): Promise<TradeEvent
     if (signal?.aborted) throw e;
     result = await rpcTx(ARCHIVAL_RPC_URL, row.transaction_hash, row.signer_account_id, signal);
   }
-  const events: TradeEvent[] = [];
+  const events: ChainEvent[] = [];
+  const y = (v?: string) => (v ? yoctoToNear(v) : 0);
   for (const r of result.receipts_outcome) {
     for (const log of r.outcome.logs) {
       if (!log.startsWith("EVENT_JSON:")) continue;
@@ -93,9 +110,15 @@ async function tradeEvents(row: TxRow, signal?: AbortSignal): Promise<TradeEvent
         if (ev.standard !== "ejecto") continue;
         for (const d of ev.data) {
           if (ev.event === "ejecto_buy") {
-            events.push({ kind: "buy", account: d.account_id, near: yoctoToNear(d.near_in), tokens: unitsToTokens(d.tokens_out) });
+            events.push({ kind: "buy", account: d.account_id, near: y(d.near_in), fund: y(d.fund_fee) + y(d.dust_to_fund), reserve: 0, tokens: unitsToTokens(d.tokens_out) });
           } else if (ev.event === "ejecto_sell") {
-            events.push({ kind: "sell", account: d.account_id, near: yoctoToNear(d.near_out), tokens: unitsToTokens(d.tokens_in) });
+            events.push({ kind: "sell", account: d.account_id, near: y(d.near_out), fund: y(d.fund_fee), reserve: 0, tokens: unitsToTokens(d.tokens_in) });
+          } else if (ev.event === "ejecto_eject") {
+            events.push({ kind: "eject", account: row.signer_account_id, near: y(d.reserve_e), fund: y(d.fund_e), reserve: y(d.reserve_e), tokens: unitsToTokens(d.supply_e) });
+          } else if (ev.event === "ejecto_claim") {
+            const reserve = y(d.reserve_part);
+            const fund = y(d.fund_part);
+            events.push({ kind: "claim", account: d.account_id, near: reserve + fund, fund, reserve, tokens: unitsToTokens(d.tokens_burned) });
           }
         }
       } catch {
@@ -128,18 +151,22 @@ async function mapLimit<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>
  */
 export async function loadHistory(coinId: string, signal?: AbortSignal): Promise<History> {
   const rows = (await listTxns(coinId, signal)).filter((r) => r.outcomes.status !== false);
-  const tradeRows = rows.filter((r) => r.actions.some((a) => a.method === "buy" || a.method === "sell"));
+  const METHODS = ["buy", "sell", "eject", "claim"];
+  const eventRows = rows.filter((r) => r.actions.some((a) => a.method && METHODS.includes(a.method)));
   const ejectRow = rows.find((r) => r.actions.some((a) => a.method === "eject"));
 
-  const perTx = await mapLimit(tradeRows, 4, (row) => tradeEvents(row, signal).catch(() => [] as TradeEvent[]));
+  const perTx = await mapLimit(eventRows, 4, (row) => chainEvents(row, signal).catch(() => [] as ChainEvent[]));
   const trades: Trade[] = [];
+  const log: LogEntry[] = [];
   let supply = 0;
-  tradeRows.forEach((row, idx) => {
+  eventRows.forEach((row, idx) => {
     const t = Number(BigInt(row.block_timestamp) / 1_000_000n);
     for (const ev of perTx[idx]) {
+      log.push({ t, ...ev, hash: row.transaction_hash });
+      if (ev.kind !== "buy" && ev.kind !== "sell") continue;
       supply = Math.max(0, supply + (ev.kind === "buy" ? ev.tokens : -ev.tokens));
-      trades.push({ t, ...ev, supply, price: priceAtSupply(supply), hash: row.transaction_hash });
+      trades.push({ t, kind: ev.kind, account: ev.account, near: ev.near, tokens: ev.tokens, supply, price: priceAtSupply(supply), hash: row.transaction_hash });
     }
   });
-  return { trades, ejectAt: ejectRow ? Number(BigInt(ejectRow.block_timestamp) / 1_000_000n) : null };
+  return { trades, log, ejectAt: ejectRow ? Number(BigInt(ejectRow.block_timestamp) / 1_000_000n) : null };
 }
