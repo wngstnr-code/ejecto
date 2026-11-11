@@ -138,7 +138,7 @@ near contract call-function as-transaction fleet.ejecto.testnet set_coin_code fi
   prepaid-gas '100 Tgas' attached-deposit '0 NEAR' sign-as ejecto.testnet network-config testnet sign-with-legacy-keychain send
 # launch deposit: 2.95276 NEAR. Register with storage_balance_bounds().min (0.00327 NEAR for v3), never a hardcoded value.
 
-# before submission: freeze, then delete the factory account's own full-access key
+# done 2026-11-11 (freeze tx 8ETkUY26JiNWuMGSGryVpYdmMfVDediafFxCTt8rDETo): freeze, then delete the factory account's own full-access key
 near contract call-function as-transaction fleet.ejecto.testnet freeze json-args '{}' \
   prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as ejecto.testnet network-config testnet sign-with-legacy-keychain send
 near account delete-keys fleet.ejecto.testnet public-keys <key> network-config testnet sign-with-legacy-keychain send
