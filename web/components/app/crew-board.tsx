@@ -10,8 +10,10 @@ import { Amount, PanelTitle } from "./ui";
 
 type Member = {
   account: string;
-  /** First buy in the log (ms). */
+  /** Start of the current streak aboard (ms). */
   since: number;
+  /** Pledged to a Mayday that rescued this coin. */
+  rescuer: boolean;
   /** Share of the fund weight: net NEAR at risk times time held. */
   share: number;
   basis: number;
@@ -36,13 +38,63 @@ export function CrewBoard({ n, coinId, status, history }: { n: string; coinId: s
   const [views, setViews] = useState<Record<string, HolderView> | null>(null);
   const ejected = status.ejected;
 
-  // Everyone who ever bought, oldest first, with their first buy time.
-  const firstBuy = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const e of history?.log ?? []) if (e.kind === "buy" && !m.has(e.account)) m.set(e.account, e.t);
-    return m;
-  }, [history]);
-  const key = `${status.supply}|${status.reserve}|${status.fund}|${[...firstBuy.keys()].join(",")}`;
+  // Streaks aboard, from the token flows in the log (oldest first): a streak starts when a holder's
+  // tokens go from zero to positive and ends when they go back to zero (full sell or claim). A rescue
+  // gives every pledger of that round their tokens at the rescue, even before they collect them.
+  const { firstBuy, streakStart, rescuers, record } = useMemo(() => {
+    const bal = new Map<string, number>();
+    const start = new Map<string, number>();
+    const first = new Map<string, number>();
+    const rescued = new Set<string>();
+    const pledgers = new Map<number, Set<string>>(); // round -> accounts that pledged in it
+    const waiting = new Set<string>(); // rescued, tokens still in escrow
+    let best: { account: string; ms: number; open: boolean } | null = null;
+    const end = status.ejected ? status.ejected.t_e * 1000 : status.now_ts * 1000;
+    const aboard = (acc: string) => (bal.get(acc) ?? 0) > 1e-6 || waiting.has(acc);
+    const begin = (acc: string, t: number) => {
+      if (!first.has(acc)) first.set(acc, t);
+      if (!start.has(acc)) start.set(acc, t);
+    };
+    for (const e of history?.log ?? []) {
+      const round = e.round ?? 0;
+      if (e.kind === "pledge") {
+        if (!pledgers.has(round)) pledgers.set(round, new Set());
+        pledgers.get(round)!.add(e.account);
+        continue;
+      }
+      if (e.kind === "rescue") {
+        for (const acc of pledgers.get(round) ?? []) {
+          rescued.add(acc);
+          waiting.add(acc);
+          begin(acc, e.t);
+        }
+        continue;
+      }
+      if (e.kind === "collect") {
+        waiting.delete(e.account);
+        bal.set(e.account, (bal.get(e.account) ?? 0) + e.tokens);
+        continue;
+      }
+      if (e.kind === "buy") {
+        if (!aboard(e.account)) start.delete(e.account);
+        begin(e.account, e.t);
+        bal.set(e.account, (bal.get(e.account) ?? 0) + e.tokens);
+        continue;
+      }
+      if (e.kind === "sell" || e.kind === "claim") {
+        bal.set(e.account, Math.max(0, (bal.get(e.account) ?? 0) - e.tokens));
+        const s0 = start.get(e.account);
+        if (!aboard(e.account) && s0 !== undefined) {
+          if (!best || e.t - s0 > best.ms) best = { account: e.account, ms: e.t - s0, open: false };
+          start.delete(e.account);
+        }
+      }
+    }
+    for (const [acc, s0] of start) if (!best || end - s0 > best.ms) best = { account: acc, ms: end - s0, open: true };
+    return { firstBuy: first, streakStart: start, rescuers: rescued, record: best as { account: string; ms: number; open: boolean } | null };
+  }, [history, status.ejected, status.now_ts]);
+  // `history` is in the key so the board loads once the log arrives, even when nobody has bought yet.
+  const key = `${!!history}|${status.supply}|${status.reserve}|${status.fund}|${status.pledges_held}|${[...firstBuy.keys()].join(",")}`;
 
   useEffect(() => {
     if (!history) return;
@@ -70,11 +122,12 @@ export function CrewBoard({ n, coinId, status, history }: { n: string; coinId: s
     for (const [account, since] of firstBuy) {
       const v = views[account];
       const claim = claims.get(account);
+      const rescuer = rescuers.has(account);
       if (claim) {
-        list.push({ account, since, share: fundE > 0 ? claim.fund / fundE : 0, basis: v ? signed(v.basis) : 0, payout: claim.near, fund: claim.fund, state: "claimed" });
+        list.push({ account, since, rescuer, share: fundE > 0 ? claim.fund / fundE : 0, basis: v ? signed(v.basis) : 0, payout: claim.near, fund: claim.fund, state: "claimed" });
         continue;
       }
-      if (!v || BigInt(v.balance) === 0n) {
+      if (!v || BigInt(v.balance) + BigInt(v.collectable ?? "0") === 0n) {
         gone++;
         continue;
       }
@@ -82,11 +135,11 @@ export function CrewBoard({ n, coinId, status, history }: { n: string; coinId: s
       const share = total > 0n ? Number((BigInt(v.weight) * 1_000_000n) / total) / 1_000_000 : 0;
       const reserve = yoctoToNear(v.reserve_part);
       const fund = yoctoToNear(v.fund_part);
-      list.push({ account, since, share, basis: signed(v.basis), payout: reserve + fund, fund, state: ejected ? "waiting" : "aboard" });
+      list.push({ account, since: streakStart.get(account) ?? since, rescuer, share, basis: signed(v.basis), payout: reserve + fund, fund, state: ejected ? "waiting" : "aboard" });
     }
     list.sort((a, b) => b.share - a.share || b.payout - a.payout || a.since - b.since);
     return { members: list, left: gone };
-  }, [views, history, firstBuy, ejected]);
+  }, [views, history, firstBuy, streakStart, rescuers, ejected]);
 
   const summary = ejected
     ? `${members.filter((m) => m.state === "claimed").length} claimed, ${members.filter((m) => m.state === "waiting").length} still to claim`
@@ -100,6 +153,7 @@ export function CrewBoard({ n, coinId, status, history }: { n: string; coinId: s
       <p className="label mt-4 leading-relaxed text-muted">
         Loyalty is each holder&apos;s share of the fund weight: net NEAR at risk times time held. Big late buys and quick flips earn almost none.
       </p>
+      {record && <HighScore record={record} dayLength={status.day_length_sec} />}
 
       {!views ? (
         <div className="mt-4 space-y-3" aria-label="Loading the crew">
@@ -134,6 +188,11 @@ function Row({ m, rank, you, ejected }: { m: Member; rank: number; you: boolean;
         <a href={explorerAccount(m.account)} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate font-semibold tracking-tight hover:text-hazard">
           {m.account}
         </a>
+        {m.rescuer && (
+          <span className="label shrink-0 rounded-full border border-hud/60 px-2 py-0.5 text-hud" title="Pledged to a Mayday that rescued this coin">
+            Rescuer
+          </span>
+        )}
         {you && <span className="label shrink-0 rounded-full bg-hazard px-2 py-0.5 font-bold text-ink">You</span>}
         <span className="shrink-0 text-right tabular-nums">
           <Amount icon="text-muted">{formatNear(m.payout, 4)}</Amount>
@@ -149,5 +208,27 @@ function Row({ m, rank, you, ejected }: { m: Member; rank: number; you: boolean;
         </span>
       </div>
     </li>
+  );
+}
+
+/** The longest streak aboard, printed like a high score (the Memecoins track's own example). */
+function HighScore({ record, dayLength }: { record: { account: string; ms: number; open: boolean }; dayLength: number }) {
+  const days = record.ms / 1000 / dayLength;
+  return (
+    <div className="mt-5 flex items-center gap-4 overflow-hidden rounded-2xl border border-hazard/50 bg-hazard/10 px-5 py-4">
+      <span className="display shrink-0 text-xs leading-tight text-hazard">
+        Longest
+        <br />
+        seat
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-semibold tracking-tight">{record.account}</span>
+        <span className="label mt-0.5 block text-muted">{record.open ? "still aboard" : "record, now off the ship"}</span>
+      </span>
+      <span className="shrink-0 text-right">
+        <span className="display block text-3xl leading-none tabular-nums text-hazard">{days >= 10 ? days.toFixed(0) : days.toFixed(1)}</span>
+        <span className="label block text-muted">{dayLength < 86400 ? "coin days" : "days"}</span>
+      </span>
+    </div>
   );
 }
