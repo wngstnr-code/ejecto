@@ -12,6 +12,7 @@
 //      (spec invariants 2 and 7)
 //   5. after EJECT: claims never paid out more than the frozen reserve + fund (spec invariant 4)
 //   6. the fee preset readable in `status` matches the spec table
+//   7. a frozen factory has no access keys either, so nobody can change it
 // Exit code 0 when everything holds, 1 otherwise.
 
 const FACTORY = process.argv[2] ?? "fleet.ejecto.testnet";
@@ -73,7 +74,11 @@ async function main() {
   const coins = await view(FACTORY, "get_coins", { from_index: 0, limit: 100 });
   console.log(`factory ${FACTORY}`);
   ok("factory stores the verified coin code", config.coin_code_hash === VERIFIED_COIN_HASH, config.coin_code_hash.slice(0, 12));
-  if (config.frozen !== undefined) console.log(`  info  frozen: ${config.frozen} (a frozen factory can never change the coin code)`);
+  if (config.frozen) {
+    ok("factory is frozen: the coin code can never change", true, "frozen");
+    const fkeys = await rpc({ request_type: "view_access_key_list", account_id: FACTORY });
+    ok("factory account has 0 access keys", fkeys.keys.length === 0, `${fkeys.keys.length} keys`);
+  } else if (config.frozen !== undefined) console.log("  info  not frozen yet (the owner can still replace the code for future launches)");
   ok("factory lists every launched coin", coins.length === config.coins, `${coins.length} coins`);
 
   for (const c of coins) {
