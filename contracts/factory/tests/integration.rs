@@ -379,7 +379,7 @@ async fn wait_until(env: &Env, a: &Account, coin: &AccountId, what: &str, pred: 
 }
 
 #[tokio::test]
-async fn mayday_rescue_with_ten_pledgers_and_fund_coinvest() -> anyhow::Result<()> {
+async fn mayday_rescue_with_ten_pledgers_and_locked_time_weight() -> anyhow::Result<()> {
     let env = setup().await?;
     let creator = user(&env, "creator", 10).await?;
     assert!(launch(&env, &creator, "mayday").await?.is_success());
@@ -428,7 +428,8 @@ async fn mayday_rescue_with_ten_pledgers_and_fund_coinvest() -> anyhow::Result<(
     let blocked = crew.call(&coin, "eject").gas(Gas::from_tgas(100)).transact().await?;
     assert!(blocked.is_failure(), "eject must fail during a Mayday");
 
-    // nine more pledges, each 1/10 of the rest; the last one reaches the target and rescues
+    // nine more pledges, each 1/10 of the rest (rounded up); the last one reaches the target,
+    // rescues, and gets the few yocto above the target sent back
     let each = (target - target / 10) / 9 + 1;
     let fund_before = u128_of(&s["fund"]);
     for (i, p) in pledgers.iter().enumerate().skip(1) {
@@ -442,7 +443,11 @@ async fn mayday_rescue_with_ten_pledgers_and_fund_coinvest() -> anyhow::Result<(
     assert_eq!(s["rescues"], json!(1));
     assert!(s["mayday"].is_null());
     assert_eq!(s["ejectable"], json!(false), "the rescue counts as a buy: the coin is alive");
-    assert!(u128_of(&s["fund"]) < fund_before + target, "the fund co-invested part of the rescue");
+    assert!(u128_of(&s["fund"]) > fund_before, "the rescue paid the buy fee: the fund only grew");
+    assert_eq!(u128_of(&s["pledges_held"]), 0);
+    let r1: Value = crew.view(&coin, "get_round").args_json(json!({ "round": 1 })).await?.json()?;
+    assert_eq!(u128_of(&r1["pledges_left"]), target, "the rescue spent exactly the target");
+    assert!(r1["bonus_left"].is_string(), "the locked-time weight waits in escrow");
 
     // everyone collects; the escrow (the coin account) ends empty
     let mut got = 0u128;
@@ -455,8 +460,7 @@ async fn mayday_rescue_with_ten_pledgers_and_fund_coinvest() -> anyhow::Result<(
     assert_eq!(escrow, 0, "the escrow must be empty");
     assert!(got > 0);
     let round: Value = crew.view(&coin, "get_round").args_json(json!({ "round": 1 })).await?.json()?;
-    assert_eq!(round["rescued"], json!(true));
-    assert_eq!(u128_of(&round["pledges_left"]), 0);
+    assert!(round.is_null(), "a fully collected round is deleted");
 
     // the coin still has no access keys
     let keys = env.worker.view_access_keys(&coin).await?;
