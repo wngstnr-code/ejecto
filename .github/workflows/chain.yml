@@ -21,4 +21,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node scripts/verify-chain.mjs factory.ejecto.testnet
+      - run: node scripts/verify-chain.mjs fleet.ejecto.testnet
