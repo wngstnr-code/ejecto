@@ -41,7 +41,10 @@ Accounts are prepared with near-cli. The only manual step is topping up with the
 | Account | Purpose | Initial balance |
 |---|---|---|
 | `ejecto.testnet` (`FUNDER_ACCOUNT`, `MASTER_ACCOUNT`, `OWNER_ACCOUNT`) | Pays for everything, parent of all named accounts, factory owner | 10 NEAR from the faucet service |
-| `factory.ejecto.testnet` | Factory contract. Coins become `<symbol>.factory.ejecto.testnet`. | 1 NEAR |
+| `fleet.ejecto.testnet` | The live factory (coin code v3, D-039). Coins become `<symbol>.fleet.ejecto.testnet`. | 5.3 NEAR |
+| `coins.ejecto.testnet`, `factory.ejecto.testnet` | Archived factories with coin code v2 and v1; their coins keep working | |
+| `founder.ejecto.testnet` | Launches the demo coins | from helpers |
+| `ejecto-topupN.testnet` | Faucet-service helpers that forward their 10 NEAR. The service rate-limits (HTTP 429), so create one at a time and never retry in a loop. The CLI saves the key before calling the service, so a failed attempt leaves a key file for an account that does not exist. | 10 NEAR each |
 | `fees.ejecto.testnet` | Receives protocol fees | 0.1 NEAR |
 | `ani`, `budi`, `cici`, `whale` `.ejecto.testnet` | Demo holders and the attack demo | 0.5 NEAR each |
 
@@ -120,7 +123,28 @@ cd contracts/coin && cargo test
 cd contracts/factory && cargo test        # includes near-workspaces sandbox tests
 ```
 
-### Deploy the factory to testnet (done 2026-11-09)
+### Deploy the live factory `fleet.ejecto.testnet` (done 2026-11-11)
+
+The factory code did not change since v2, so the deployed wasm is byte for byte the v2 factory (sha256 `4e735518...`, verified on NearBlocks at commit `ef0d663`; fetched from `coins.ejecto.testnet` with the RPC `view_code` call). The coin wasm is the reproducible build at commit `31bfad3` (sha256 `b562658a...`).
+
+```bash
+near account create-account fund-myself fleet.ejecto.testnet '5.3 NEAR' \
+  autogenerate-new-keypair save-to-legacy-keychain \
+  sign-as ejecto.testnet network-config testnet sign-with-legacy-keychain send
+near contract deploy fleet.ejecto.testnet use-file factory-v2.wasm \
+  with-init-call new json-args '{"owner":"ejecto.testnet","protocol_account":"fees.ejecto.testnet"}' \
+  prepaid-gas '30 Tgas' attached-deposit '0 NEAR' network-config testnet sign-with-legacy-keychain send
+near contract call-function as-transaction fleet.ejecto.testnet set_coin_code file-args ejecto_coin.wasm \
+  prepaid-gas '100 Tgas' attached-deposit '0 NEAR' sign-as ejecto.testnet network-config testnet sign-with-legacy-keychain send
+# launch deposit: 2.95276 NEAR. Register with storage_balance_bounds().min (0.00327 NEAR for v3), never a hardcoded value.
+
+# before submission: freeze, then delete the factory account's own full-access key
+near contract call-function as-transaction fleet.ejecto.testnet freeze json-args '{}' \
+  prepaid-gas '30 Tgas' attached-deposit '0 NEAR' sign-as ejecto.testnet network-config testnet sign-with-legacy-keychain send
+near account delete-keys fleet.ejecto.testnet public-keys <key> network-config testnet sign-with-legacy-keychain send
+```
+
+### Deploy the first factory to testnet (done 2026-11-09, now an archive)
 
 These exact commands were used with near-cli-rs 0.31.1 (run from `contracts/`):
 
