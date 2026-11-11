@@ -6,14 +6,14 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Item | Value |
 |---|---|
-| Phase | Mayday v2, stage 4 of 7 done (web on factory v2 with the Mayday UI). Next: stage 5 (README, chain check, mechanism note) |
-| Overall | Coin v2 and factory v2 live on testnet at `coins.ejecto.testnet` and verified. 91 coin unit tests, 18 factory unit tests, 5 sandbox tests. Web reads factory v2 (Mayday panels, Longest seat, rescuer badges). Local only, not committed yet. |
+| Phase | Coin v3 (D-039) deployed on `fleet.ejecto.testnet` and verified; coins being launched as the faucet allows. Next: finish the coins, push the web, then stage 5 (README, mechanism note) |
+| Overall | Review of stages 1 to 4 found a fund drain in the v2 Mayday (co-invest); fixed in coin code v3 (locked-time pledge weight). 100 coin unit tests, 18 factory unit tests, 5 sandbox tests. Chain check covers all three factories. |
 | Deadline | 2026-11-14 23:59 UTC (2026-11-15 06:59 WIB) |
-| Days left | 4.5 (as of 2026-11-10) |
+| Days left | 3.5 (as of 2026-11-11) |
 
 ## Next step (exact)
 
-0. Mayday v2 stages: 5) `scripts/verify-chain.mjs` gets the v2 coin hash and `pledges_held` in the balance check, `.github/workflows/chain.yml` checks `coins.ejecto.testnet`, README rewrite (Mayday built, sim results, new Jury Seats, v1 archive), `docs/mechanism.md`, claims to tests table. Then freeze the factory and delete its key (user approved), 6) re-record the demo video, 7) submit. The user must set the Vercel env `NEXT_PUBLIC_FACTORY_ID` to `coins.ejecto.testnet` (or remove it) before the next deploy.
+0. v3 rollout: launch the rest of the coins on `fleet.ejecto.testnet` (scratchpad script `v3coins.mjs launch|crew|phoenix`, storage minimum read from the coin) as faucet helpers get funded (the faucet service rate-limits with HTTP 429), then push the web (wave 2: web, chain check, docs). Stage 5: README rewrite (Mayday v3, sim results, Jury Seats on fleet, v1 and v2 archives), `docs/mechanism.md`, claims to tests table, `build-and-deploy.md` for fleet. Then freeze `fleet.ejecto.testnet` and delete its key (user approved), 6) re-record the demo video, 7) submit. Vercel has no env vars: the web uses the `FACTORY_ID` default in `web/lib/config.ts`.
 1. Done for buy, EJECT and claim (see the session log). Launch from the `/launch/` form (`wngst`) and sell (`2hVG73vDZ8XEkZTEYxJKqt6Y7XeAnegwGnAoBG5cykP2`, 2% fund fee on the gross) also done. Every flow has now run on testnet. For the demo video use a fresh coin and buy more than 1 NEAR in total within the first 140 s (10 s days), or use longer demo days, so the coin is alive before it dies.
 2. Check the app pages and the landing at phone width.
 3. Done: live at https://ejecto.vercel.app (Vercel, D-031). Check the CI run on GitHub after each push.
@@ -98,6 +98,22 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 - Mayday v2 (D-038, supersedes D-037): stage 1 done (spec section 10 rewritten as the full design with fund co-invest and no lock; `sim/mayday-experiment.mjs` passes the broad gate). Stage 2 done: coin code v2 (`mayday`, `pledge`, `collect`, `withdraw_pledge`, `get_round`, escrow held by the coin account, transfers to the coin and unregister with a pledge refused, `status` and `holder` extended, events 1.1.0) with 20 new unit tests (91 in total, including 600 random steps that check every invariant with Maydays); factory v2 with `freeze()` (18 unit tests); sandbox 5 tests (Mayday with 10 pledgers: open 2.3 Tgas, last pledge plus rescue 3.5 Tgas). Coin wasm 264 KB. A view bug found by the random test (`can_mayday` true for an expired, unclosed Mayday) was fixed. Next: stage 3, deploy `coins.ejecto.testnet`, reproducible build and verification, new coins, freeze. README edits (TL;DR, jury seats, Mayday table) are held back until stage 5.
 - Crew board (holders ranked by loyalty, live from `holder`) and "Share my seat" / "Share my parachute" X intents on the coin page and My seats; README gains a Social Money section (D-035). meme.cooking: read its docs (deposit countdown, then a Ref pool locked 69 years, launchpad contract closed source); a real integration would need a new contract and pool data from outside the coin, so it stays out of scope; the README explains how the two fit together (birth and death of a memecoin) and names an Ejecto seat for AMM tokens as future work.
 
+## Review notes (2026-11-11, stages 1 to 4 deep review and coin v3)
+
+| Finding | Fix |
+|---|---|
+| High: the v2 fund co-invest let a lone rescuer pledge, collect and sell for a profit paid by the fund (+2.44 NEAR on a 7 NEAR fund, repeatable). Confirmed by a unit test; the model missed it (small funds) | Coin code v3 (D-039): the fund spends nothing at a rescue; pledges earn weight for the time they were locked. Test `rescue_and_dump_loses_money_with_a_large_fund` |
+| High: a pledge above the target was spent in full (inflated the peak and the co-invest) | Pledges are filled up to the target, the rest is sent back in the same call |
+| Design (second review): a flat 7-day bonus rewarded an instant solo rescue with nothing locked | Weight from locked time only (`sc * t_rescue - tw`); an instant solo rescue earns nothing |
+| A gap under 0.001 NEAR could leave a dust pledge | Such a gap counts as reached |
+| `collect` reverted on a dust pledge; `withdraw_pledge` panicked on a rescued round | `collect` clears the pledge; `withdraw_pledge` collects |
+| Rounds never deleted; `mayday()` returned a stale round; the cooldown view counted an open Mayday | Settled rounds deleted; `mayday()` returns `Option`; cooldown only after a failure |
+| `rescue` duplicated the buy booking; the holder view could promise more weight than `settle` moves | Shared `apply_buy`; the view caps at the escrow weight like `settle` |
+| Residual: whoever sends the completing pledge can sandwich it | Documented in spec section 10; bounded by the 3x target cap and 4% round-trip fees |
+| v3 holder entries are 32 bytes larger, so `storage_deposit` needs more (0.00327 NEAR) | The web and scripts read `storage_balance_bounds`; nothing is hardcoded |
+
+All else held: 100 + 18 unit tests, 5 sandbox tests, the default simulation output is byte-identical to before stage 1, every coin on all three factories is keyless with the verified code and an exact reserve.
+
 ## Review notes (2026-11-11, stage 4 web)
 
 Deep review of the stage 4 web diff (build, spec section 10 next to the UI, code review, docs).
@@ -146,7 +162,9 @@ Deep review of the stage 4 web diff (build, spec section 10 next to the UI, code
 | Demo coin Seato ($SEAT) | `seat.factory.ejecto.testnet` | Launched 2026-11-10 by `founder.ejecto.testnet` (tx `EmfZJLE1hHL2aokCcWwhjJzqrHh65okYJ6rk21siQDtH`), icon `web/public/brand/seat-coin.svg`, demo time 10 s per day, 0 access keys, source verified on NearBlocks. Alive line floor is 1 NEAR, so with smaller buys it is ejectable right after day 14. |
 | Jury coins ($JURY1, $JURY2, $JURY3) | `jury1..3.factory.ejecto.testnet` | Launched 2026-11-10 19:05 UTC for judges (D-036), demo time 10 s, crew ani 0.3, budi 0.2, cici 0.1 NEAR, ready to EJECT. Launch txs `JTwpaR26NacWR9bJB8C3xB7kfZKLxSHrhX9XPp6oizt`, `HakWeoLKrjKdb6gqobJoHtrCUxi5Rzuz56bkYcECKFs1`, `AyxymL4cqpzJteRU84hckGn32gtAaAkqncRK4aEtX5e5`. |
 | Jury coins 4 to 8 | `jury4..8.factory.ejecto.testnet` | Launched 2026-11-10 19:34 UTC, same setup as jury 1 to 3 (D-037). Eight Jury Seats in total. |
-| **Factory v2** | `coins.ejecto.testnet` | Deployed 2026-11-11 (tx `2FuRTSTqNTMDLyJSrHJo5rBVimhiGYAG6txL9TD13iG5`), owner `ejecto.testnet`, coin code `e4092754...2e55` (263,494 bytes, launch deposit 2.93494 NEAR). Factory and coin source verified on NearBlocks at commit `ef0d663`. Not frozen yet: `freeze()` and the key deletion are planned right before submission, after the web integration. |
+| **Factory v3 (live)** | `fleet.ejecto.testnet` | Created 2026-11-11 (tx `28gVDaRidiwQxrsskffDtQeiprXzgmQQp8FJi7QXLJCF`), factory wasm identical to v2 (sha256 `4e735518...`, verified at commit `ef0d663`), deployed with `new` (tx `GWeQLpLMSgo1c9FruSPcYXMGJ5jYzTVeJEqrUt9mGi1H`), coin code v3 (tx `2yqV8CifJi5hqjwaLA9BSfRWoiFaQqUkaXvZCbx1GNyH`, sha256 `b562658a418490b45e41eafca156ffe557d6a2fe70a4b33cd847fb05f1023d8a`, 265,276 bytes, reproducible at commit `31bfad3`, source verified on NearBlocks). Launch deposit 2.95276 NEAR. Not frozen yet. |
+| v3 coins | `jury1..3.fleet.ejecto.testnet` so far | Launched by `founder.ejecto.testnet` (jury1 `DsjXrcXXmxzsAcdquL3ytjddNkb6mZj55jQRuP53ZhtT`, jury2 `D4xUtNnUVJYQVr6JG8Z9ruV8ogRHPnBLTYEtqftC8bD6`, jury3 `Qmud6pLsyAJn2Lsi2ZkALb5J5TNBTHTLJnwVnUhZxp6`); crew ani 0.3, budi 0.2, cici 0.1 on jury1 and jury2. Planned: jury4..7, phoenix, seat, wngst, crash, each with its own logo. |
+| Factory v2 (archive) | `coins.ejecto.testnet` | Deployed 2026-11-11 (tx `2FuRTSTqNTMDLyJSrHJo5rBVimhiGYAG6txL9TD13iG5`), owner `ejecto.testnet`, coin code `e4092754...2e55` (263,494 bytes, launch deposit 2.93494 NEAR). Factory and coin source verified on NearBlocks at commit `ef0d663`. Not frozen yet: `freeze()` and the key deletion are planned right before submission, after the web integration. |
 | v2 coins | `seat`, `wngst` (real days, old logos), `jury1..6`, `phoenix`, `crash` (demo time, new logos) `.coins.ejecto.testnet` | Jury Seats: crew ani 0.3, budi 0.2, cici 0.1 NEAR, ready to EJECT or Mayday. Phoenix: Mayday round 1 failed and both pledges were withdrawn in full, round 2 rescued it (ani 0.3, budi 0.4, cici 0.3, target 1 NEAR), all collected. Crash Test: no crew, left for hand testing. All keyless; `verify-chain` passes every coin check. |
 | Demo coin Pilot ($PILOT) | `pilot.factory.ejecto.testnet` | Launched 2026-11-10 from the web form for the demo video (tx `FQz2inaghVdmw7ZBzi9a1GxxdicHkh12FFg7hs4BpVt2`), demo time 10 s, ejected and fully claimed. Source verified (same code). |
 | Real-days coin Wangsit ($WNGST) | `wngst.factory.ejecto.testnet` | Launched 2026-11-10 from the `/launch/` form by `founder.ejecto.testnet` (tx `FmYjG6CGwryhYPckiwfQzHXcooHzvZ2iUrNJzs6GKZWF`), 24 h days, uploaded icon (WebP), 0 access keys, source verified (same code hash as `seat`). EJECT possible from about 2026-11-24. |
