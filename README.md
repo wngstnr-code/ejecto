@@ -44,10 +44,20 @@ Late buyers can still lose some money: early buyers got more tokens per NEAR, so
 
 ## Why NEAR (concretely)
 
-- **One account per coin.** The factory creates a sub-account per coin and deploys the coin wasm to it in one batch, then adds no key. The coin is an immutable, keyless contract that anyone can inspect, which is how "no rug" is enforced instead of promised.
-- **Verifiable code.** Both contracts are built reproducibly (`cargo near build reproducible-wasm`, pinned SourceScan image) and verified on NearBlocks; every coin shares the verified code hash.
-- **Standards.** Coins are NEP-141 tokens with NEP-145 storage; the first buy batches `storage_deposit` and `buy` in one transaction.
-- **No backend.** The web app is a static site. It reads contract views over public RPC and signs with NEAR Connect. Price history is rebuilt in the browser from the contract's own events.
+Ejecto leans on things NEAR has at the protocol level. Each row says what it is used for and how to check it yourself.
+
+| NEAR feature | What Ejecto uses it for | Check it |
+|---|---|---|
+| **An account per contract, keys per account** | Every coin is its own named account, `<symbol>.fleet.ejecto.testnet`, created with **no access key**. With no key, nobody can sign for the account, so nobody can redeploy, upgrade or drain it: "no rug" is a property of the account, not a promise. | `near account list-keys jury1.fleet.ejecto.testnet network-config testnet now` shows an empty table |
+| **Atomic batch actions** | The factory launches a coin in one batch: create the account, fund it, deploy the code, call `new`. If any step fails the whole batch reverts, so a half-made coin with a key can never exist. | [`create_coin`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/factory/src/lib.rs#L148) and the sandbox test `launch_is_keyless_and_full_lifecycle_works` |
+| **Frozen factory, then no key** | The factory stores the one verified coin code. `freeze()` makes `set_coin_code` fail forever and the factory account's own key is deleted before the deadline, so the code of *future* coins cannot change either. | `get_config` on `fleet.ejecto.testnet` shows the code hash (and `"frozen": true` once frozen) |
+| **Storage staking** | A coin pays for its own state out of the launch deposit (code size times the storage price plus 0.3 NEAR, 2.95 NEAR today), and each holder's entry is paid by NEP-145 `storage_deposit`. Nothing has rent that can run out and nobody has to keep a server paid. | `verify-chain` checks that every coin's balance covers reserve, fund, protocol fees, held pledges **and** storage |
+| **Cheap, predictable gas** | Every method is O(1): no loop over holders or pledgers. A Mayday rescue with any number of pledgers costs 4.2 Tgas (about 0.0004 NEAR); EJECT costs 1.9 Tgas. That is what makes "anyone can pull the handle" and a crowd rescue practical. | Gas printed by the sandbox tests (`cargo test --test integration -- --nocapture`) |
+| **Promise-based transfers** | Payouts (sell, claim, refunds of pledges) are plain transfers sent after the state is final, so a failed or delayed transfer can never leave the books half-updated. | `sell`, `claim`, `withdraw_pledge` in [`lib.rs`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/lib.rs) |
+| **NEP-141 / NEP-145 / NEP-297 / NEP-330** | Standard token and storage, standard events for every buy, sell, Mayday step, EJECT and claim, and the build metadata that ties the deployed wasm to a git commit. | `ft_metadata`, the on-chain log on any coin page, `contract_source_metadata` |
+| **Reproducible builds and SourceScan** | Both contracts are built in a pinned image and verified on NearBlocks, so the code you read on GitHub is the code that runs. | **Contract Source Code Verified** on the [factory](https://testnet.nearblocks.io/address/fleet.ejecto.testnet/contract/code) and every coin |
+
+There is no backend: the web app is a static site that reads contract views over public RPC, signs with NEAR Connect, and rebuilds the price history and the log in the browser from the contracts' own events.
 
 ---
 
