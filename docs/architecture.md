@@ -18,7 +18,8 @@ Mechanics and formulas are defined in `product-spec.md`. This file explains how 
 |  - coin registry   | deploys |  - NEP-141 token             |
 |  - coin wasm       |         |  - bonding curve + reserve   |
 |  - protocol config |         |  - Ejecto Fund + accounting  |
-+--------------------+         |  - alive detector, EJECT     |
+|  - freeze()        |         |  - alive detector, EJECT     |
++--------------------+         |  - Mayday rescue + escrow    |
                                |  - claim, protocol fees      |
                                |  NO access keys, NO admin    |
                                +------------------------------+
@@ -55,10 +56,15 @@ pub struct Coin {
 
     // terminal state
     ejected: Option<EjectSnapshot>,         // t_e, reserve_e, supply_e, fund_e, w_e
+
+    // Mayday (spec section 10): the open round, closed rounds, cooldown, NEAR held for pledges
+    mayday: Option<Mayday>,                 // round, opener, target, pledged, opened_ts, deadline_ts
+    rounds: LookupMap<u32, Round>,          // rescued, ts, tokens_left, pledges_left
+    round_count: u32, rescues: u32, mayday_open_after_ts: u64, pledges_held: u128,
 }
 
 // weight is in (yoctoNEAR / 10^12) x seconds, so u128 is enough
-pub struct Holder { basis: i128, weight: u128, last_ts: u64, claimed: bool }
+pub struct Holder { basis: i128, weight: u128, last_ts: u64, claimed: bool, pledge: u128, pledge_round: u32 }
 ```
 
 ### Methods
@@ -71,10 +77,15 @@ pub struct Holder { basis: i128, weight: u128, last_ts: u64, claimed: bool }
 | `sell(amount, min_near_out)` | call | holder | Transfers NEAR out |
 | `ft_transfer`, `ft_transfer_call`, `ft_total_supply`, `ft_balance_of`, `ft_metadata` | NEP-141 / NEP-148 | standard | Transfer moves basis, not weight |
 | `eject()` | call | anyone | Only when the alive rule allows it |
-| `claim()` | call | holder | Pull-based payout after EJECT |
+| `claim()` | call | holder | Pull-based payout after EJECT (collects rescue tokens first) |
+| `mayday(target)` | payable call | registered account | Opens a Mayday when EJECT is possible; the deposit is the opener's pledge (at least 10% of the target) |
+| `pledge()` | payable call | registered account | Adds escrowed NEAR to the open round; the pledge that reaches the target runs the rescue buy |
+| `collect()` | call | pledger | Moves the pledger's rescue tokens, basis and weight out of the escrow (also runs on every buy, sell, transfer and claim) |
+| `withdraw_pledge()` | call | pledger | Returns a failed round's pledge in full |
+| `get_round(round)` | view | anyone | A closed round: rescued or failed, tokens and pledges still in escrow |
 | `withdraw_protocol_fees()` | call | anyone | Sends to the fixed protocol account |
-| `status()` | view | anyone | Price, supply, reserve, fund, day, window buys, peak, threshold, ejectable flag, total weight, ejected snapshot, params |
-| `holder(account_id)` | view | anyone | Balance, basis, live weight, estimated claim if ejected now |
+| `status()` | view | anyone | Price, supply, reserve, fund, day, window buys, peak, threshold, ejectable flag, total weight, ejected snapshot, params, open Mayday, `can_mayday`, cooldown end, rescues, pledges held |
+| `holder(account_id)` | view | anyone | Balance, basis, live weight, estimated claim if ejected now (escrow tokens included), pledge, pledge state, collectable tokens |
 | `quote_buy(amount)` / `quote_sell(amount)` | view | anyone | For the UI |
 
 There are no owner-only methods. There is no upgrade method.
@@ -86,18 +97,19 @@ There are no owner-only methods. There is no upgrade method.
 - Buy solves the quadratic with an integer square root (Newton, starting from `2^ceil(bits/2)`), then binary searches a window of 256 raw units around the root for the largest `d` whose exact cost fits. Gas stays small and constant.
 - Module layout in `contracts/coin/src/`: `curve.rs` (curve math), `accounting.rs` (holder basis and weight, claim parts), `detector.rs` (14 buckets, peak, threshold), `events.rs`, `lib.rs` (contract and NEP wrappers), `tests.rs` (contract unit tests). Pure modules carry their own unit tests.
 - Holder accounting entries live in a `near_sdk::store::LookupMap<AccountId, Holder>`. At init the contract measures one entry and adds it to the NEP-145 per-account storage, so `storage_deposit` pays for both the balance and the accounting entry.
-- Every path that changes token balances goes through the accounting: `buy`, `sell`, `ft_transfer`, `ft_resolve_transfer` (books the used part of an `ft_transfer_call`) and `claim`. `Ledger::shed` removes weight pro-rata when tokens leave a holder.
+- Every path that changes token balances goes through the accounting: `buy`, `sell`, `ft_transfer`, `ft_resolve_transfer` (books the used part of an `ft_transfer_call`), `claim`, the Mayday rescue buy and `collect`. `Ledger::shed` removes weight pro-rata when tokens leave a holder.
+- Mayday escrow: the rescue mints its tokens to the coin account, which is booked as one holder (basis = uncollected pledges), so it earns weight like any holder. `settle` moves a pledger's slice out on their next action, with no loop over pledgers. Transfers to the coin account and `storage_unregister` with an open pledge are refused.
 - NEP-141 and NEP-145 come from `near-contract-standards` (`FungibleToken`), wrapped so Ejecto can add hooks (M2) and block forced unregister.
 - Rounding rules from the spec: tokens out and proceeds round down, fees round up, rounding dust goes to the fund.
 - Time: `env::block_timestamp()` is nanoseconds. Convert to seconds. `day = (now - launch_ts) / day_length_sec`.
 
 ### Events
 
-Standard NEP-297 events for `ft_mint`, `ft_burn`, `ft_transfer`, plus Ejecto events (`ejecto_buy`, `ejecto_sell`, `ejecto_eject`, `ejecto_claim`, `ejecto_protocol_withdraw`) with JSON payloads. They help explorers and judges follow what happened.
+Standard NEP-297 events for `ft_mint`, `ft_burn`, `ft_transfer`, plus Ejecto events (version 1.1.0: `ejecto_buy`, `ejecto_sell`, `ejecto_eject`, `ejecto_claim`, `ejecto_protocol_withdraw`, and the Mayday events `ejecto_mayday_open`, `ejecto_pledge`, `ejecto_rescue`, `ejecto_mayday_fail`, `ejecto_collect`, `ejecto_pledge_withdraw`) with JSON payloads. They help explorers and judges follow what happened.
 
 ### Gas and storage
 
-Measured in the sandbox (2026-11-09): `create_coin` 45.8 Tgas, `storage_deposit` + `buy` 4.5 Tgas, `sell` 3.2 Tgas, `ft_transfer` 2.6 Tgas, `eject` 1.9 Tgas, `claim` 3.1 Tgas, `set_coin_code` 29.3 Tgas.
+Measured in the sandbox (2026-11-09): `create_coin` 45.8 Tgas, `storage_deposit` + `buy` 4.5 Tgas, `sell` 3.2 Tgas, `ft_transfer` 2.6 Tgas, `eject` 1.9 Tgas, `claim` 3.1 Tgas, `set_coin_code` 29.3 Tgas. Coin v2 (2026-11-11): `mayday` 2.3 Tgas, the last `pledge` with the rescue buy 3.5 Tgas.
 
 
 - Every method is O(1). The window sum loops over 14 buckets only.
@@ -112,12 +124,12 @@ Measured in the sandbox (2026-11-09): `create_coin` 45.8 Tgas, `storage_deposit`
 | `create_coin(name, symbol, icon, fee_preset, day_length_sec)` | payable | Validates args, creates `<symbol>.<factory>`, transfers the storage deposit, deploys the coin wasm, calls `new`. Adds **no access key**, so the coin account is keyless. Registers the coin in the list after the callback succeeds, and refunds on failure. |
 | `get_coins(from_index, limit)` / `get_coin(symbol)` | view | Coin registry for the web app |
 | `withdraw_refund()` / `pending_refund(account_id)` | call / view | Pull-based refunds of failed launches |
-| `migrate()` | private init | One-time migration from the first deployed state layout (`FactoryV1`) |
+| `freeze()` | owner only | One way: `set_coin_code` is refused for good, launches keep working. `get_config` shows `frozen`. |
 
 - `set_coin_code` takes the raw wasm bytes as the call input (near-cli `file-args`), checks the `\0asm` magic, and stores the code in a `LazyOption` with its length and sha256 hash (shown by `get_config`, so anyone can compare it with a local build).
-- `launch_deposit = coin_code_len x storage_byte_cost + 0.3 NEAR`. For the 237 KB coin this is about 2.67 NEAR. The deposit pays the new coin's storage.
+- `launch_deposit = coin_code_len x storage_byte_cost + 0.3 NEAR`. For the 263 KB coin v2 this is 2.93494 NEAR. The deposit pays the new coin's storage.
 - `create_coin` refunds anything above `launch_deposit` at once, then sends one batch to the new account: `create_account`, `transfer(launch_deposit)`, `deploy_contract(code)`, `function_call(new)`. The batch is atomic, so a failed init reverts the account creation and the deposit returns to the factory. The callback `on_coin_created` registers the coin on success (and never refunds on success). On failure it books a pending refund, because the system refund of the failed batch may reach the factory only after the callback.
-- The factory keeps an owner during development so we can update the coin code. Coins already launched are never affected, because each coin is keyless and has no upgrade path.
+- The factory keeps an owner during development so we can update the coin code. Factory v2 (`coins.ejecto.testnet`) gets `freeze()` and its full-access key deleted before submission, so the coin code is fixed for good. The first factory (`factory.ejecto.testnet`, coin code v1, no Mayday) stays live as an archive. Coins already launched are never affected, because each coin is keyless and has no upgrade path.
 - Optimization to check later: NEAR global contracts can deploy coin code by reference and reduce the launch deposit. Use plain code deployment for the MVP.
 
 ## 4. Web app (`web/`)
@@ -133,9 +145,9 @@ Pages:
 | Page | Content |
 |---|---|
 | Landing `/` | Done (D-023 to D-025). Preloader, hero, "The problem" typewriter, "The crash" pinned chart (model data), "How it works" pinned card stack, "The math" ledger (model), "Safeguards" spec board (live chain reads), final call to action, footer. A fixed 3D pilot layer (`components/landing/pilot-stage.tsx`) follows the scroll through all sections. Lenis smooth scroll, GSAP ScrollTrigger, Motion, custom scrollbar. |
-| Coins `/coins/` | Live coin list from the factory in one table card: toolbar with Status and Clock filter dropdowns and an expand (full view) button, sortable columns (price, fund, engine, launched), phase badge (warming up, alive, dying, ejectable, ejected), a small engine bar, stat pills (flying, total in funds). Polls every 8 s. |
+| Coins `/coins/` | Live coin list from the factory in one table card: toolbar with Status and Clock filter dropdowns and an expand (full view) button, sortable columns (price, fund, engine, launched), phase badge (warming up, alive, dying, ejectable, Mayday, ejected), a small engine bar, stat pills (flying, total in funds). Polls every 8 s. |
 | Launch `/launch/` | Form for `create_coin`: name, symbol with a live availability check, optional icon (resized in the browser to fit 2 KB), fee preset tiles, demo time or real days, live launch cost. After the launch it confirms the coin is registered and shows its access key count. |
-| Coin `/coin/?id=` | DEMO TIME banner, stats, engine meter (14-day buys against the alive line and peak), price history over time (D-030: NearBlocks v3 lists the transactions, contract events give the amounts, the curve gives the price), bonding curve drawn from the contract formula, buy and sell with `quote_buy`/`quote_sell` and 1% slippage, "your seat" (balance, basis, fund weight, payout if ejected now). When ejectable: the EJECT handle. After EJECT: claim panel and the eject record. A Crew board ranks the holders by loyalty (fund weight share) from the `holder` view (D-035), and an on-chain log lists every buy, sell, EJECT and claim (D-032), both in scroll boxes. Share buttons open an X post intent for a seat or a parachute. Polls `status()` and `holder()` every 4 s. Only ids of the form `<symbol>.<factory>` are accepted. |
+| Coin `/coin/?id=` | DEMO TIME banner, stats, engine meter (14-day buys against the alive line and peak), price history over time (D-030: NearBlocks v3 lists the transactions, contract events give the amounts, the curve gives the price), bonding curve drawn from the contract formula, buy and sell with `quote_buy`/`quote_sell` and 1% slippage, "your seat" (balance, basis, fund weight, payout if ejected now). When ejectable: the EJECT handle and "Call a Mayday" (target 1x to 3x the alive line, opener pledge at least 10%, fund co-invest shown). While a Mayday is open the EJECT panel is replaced by the rescue panel (progress, countdown synced to chain time, pledgers, pledge box); a pledge card offers collect after a rescue and withdraw after a failure (`components/app/mayday-panel.tsx`). After EJECT: claim panel and the eject record. A Crew board ranks the holders by loyalty (fund weight share) from the `holder` view (D-035), with a "Longest seat" high score (longest streak aboard, from the token flows in the log) and Rescuer badges, and an on-chain log lists every buy, sell, EJECT, claim and Mayday step (D-032), both in scroll boxes. Share buttons open an X post intent for a seat or a parachute. Polls `status()` and `holder()` every 4 s. Only ids of the form `<symbol>.<factory>` are accepted. |
 | My seats `/seats/` | The connected wallet's seats across all coins (factory list, then `status()` and `holder()` per coin): ready to claim (ejected, unclaimed, with a Claim button), flying (balance, net basis, fund weight, payout if ejected now), landed (claimed). Polls every 8 s. |
 | EJECT scene | After a successful EJECT the 3D pilot fires up, opens the canopy and drifts down (`components/app/eject-moment.tsx`, lazy chunk, preloaded once the coin is ejectable). Skipped with reduced motion. |
 | Simulation | Cut (D-028). The landing shows the model data. |
@@ -160,14 +172,17 @@ The app pages share a folded footer and the header with the wallet button. The w
 | Exit race at death | Trading stops at EJECT. The reserve is split pro-rata. |
 | Rounding drain | All rounding favors the contract. Invariant tests. |
 | Reentrancy or callback issues on NEAR transfers | State is updated before every outgoing transfer. Payouts are plain transfers. |
+| Mayday used to delay EJECT forever | 3 days per round, then 7 days of cooldown in which anyone can EJECT; the opener locks 10% of the target |
+| Rescue and dump to farm the fund co-invest | Fees and price impact cost more than the co-invest (model: attacker loses 11.7 of 20 NEAR); co-invest capped at 25% of pledges and 50% of the fund |
+| Pledgers lose money on a failed rescue | Assurance contract: every pledge of a failed round is withdrawn in full |
 | Contract bug | Small code, unit and integration tests, invariants, simulation parity. An audit is needed before any mainnet use. |
 
 ## 7. Testing strategy
 
 | Level | Tool | What |
 |---|---|---|
-| Unit | `cargo test` with near-sdk test utils | Curve math round trips, fees, rounding, accounting rules, alive detector, EJECT, claim sums, invariants |
+| Unit | `cargo test` with near-sdk test utils | Curve math round trips, fees, rounding, accounting rules, alive detector, EJECT, claim sums, invariants, Mayday (open, pledge, rescue, fail, collect, withdraw, cooldown, 600 random steps that check every invariant) |
 | Attack scenarios | `cargo test` | Late whale, wash trading, sybil, transfer games, buy and sell after EJECT |
-| Integration | `near-workspaces` 0.24 (Rust, sandbox), `contracts/factory/tests/integration.rs` | Factory launch, keyless check, second init rejected, duplicate symbol rejected, buy, sell, transfer, EJECT after 14 demo days, claims match the view, protocol fees arrive, low deposit rejected. Prints gas per call. |
+| Integration | `near-workspaces` 0.24 (Rust, sandbox), `contracts/factory/tests/integration.rs` | Factory launch, keyless check, second init rejected, duplicate symbol rejected, buy, sell, transfer, EJECT after 14 demo days, claims match the view, protocol fees arrive, low deposit rejected, Mayday rescue with 10 pledgers and fund co-invest, frozen factory refuses new code but still launches. Prints gas per call. |
 | Parity | `cargo test` (coin) | Contract tokens, reserve and fund match the simulation formulas within 1e-9, and the fund split matches the simulation weighting |
 | Manual | Testnet and the web app | Demo flow from `hackathon.md` |

@@ -242,7 +242,7 @@ The escrow is booked as one holder (the coin account) whose basis is the sum of 
 
 What it does not do: it cannot undo peak inflation griefing, because a fake peak raises the alive line and therefore the minimum target too.
 
-Views: `status` adds `mayday` (the open round: `round`, `opener`, `target`, `pledged`, `opened_ts`, `deadline_ts`), `mayday_open_after_day` (end of a cooldown), `rescues` and `can_mayday`. `holder` adds `pledge`, `pledge_round`, `pledge_state` (`open`, `rescued`, `failed` or none) and `collectable` (tokens waiting in escrow).
+Views: `status` adds `mayday` (the open round: `round`, `opener`, `target`, `pledged`, `opened_ts`, `deadline_ts`), `mayday_open_after_ts` (end of a cooldown, in seconds, 0 when none), `rescues`, `pledges_held` (NEAR held for open or failed pledges) and `can_mayday`. `holder` adds `pledge`, `pledge_round`, `pledge_state` (`open`, `rescued`, `failed` or none) and `collectable` (tokens waiting in escrow).
 
 Events (NEP-297, standard `ejecto`): `ejecto_mayday_open`, `ejecto_pledge`, `ejecto_rescue`, `ejecto_mayday_fail`, `ejecto_collect`, `ejecto_pledge_withdraw`.
 
