@@ -9,9 +9,14 @@ export const MIN_AGE_DAYS = 14;
 export const WINDOW_DAYS = 14;
 
 /** Gas per call in Tgas, with headroom over what the sandbox tests measured. */
-export const GAS = { storage: 30, buy: 50, sell: 50, eject: 50, claim: 50, launch: 200 } as const;
+export const GAS = { storage: 30, buy: 50, sell: 50, eject: 50, claim: 50, launch: 200, mayday: 50, pledge: 50, collect: 50, withdraw: 50 } as const;
 
-export type Phase = "new" | "alive" | "dying" | "ejectable" | "ejected";
+export type Phase = "new" | "alive" | "dying" | "ejectable" | "mayday" | "ejected";
+
+/** True while a Mayday is open and before its deadline (it blocks EJECT). */
+export function maydayOpen(s: CoinStatus): boolean {
+  return !!s.mayday && s.now_ts < s.mayday.deadline_ts;
+}
 
 /**
  * UI phase of a coin. "dying" is a UI hint only (buys under twice the alive line), the contract rule is
@@ -19,6 +24,7 @@ export type Phase = "new" | "alive" | "dying" | "ejectable" | "ejected";
  */
 export function coinPhase(s: CoinStatus): Phase {
   if (s.ejected) return "ejected";
+  if (maydayOpen(s)) return "mayday";
   if (s.ejectable) return "ejectable";
   const window = BigInt(s.window_buys);
   const line = BigInt(s.alive_threshold);
@@ -31,6 +37,7 @@ export const PHASE_LABEL: Record<Phase, string> = {
   alive: "Alive",
   dying: "Dying",
   ejectable: "Ejectable",
+  mayday: "Mayday",
   ejected: "Ejected",
 };
 

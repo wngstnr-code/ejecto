@@ -55,6 +55,9 @@ export type CoinInfo = {
 
 export type EjectSnapshot = { t_e: number; reserve_e: string; supply_e: string; fund_e: string; w_e: string };
 
+/** An open Mayday round (spec section 10). Amounts in yoctoNEAR, times in seconds. */
+export type Mayday = { round: number; opener: string; target: string; pledged: string; opened_ts: number; deadline_ts: number };
+
 /** `status()` of a coin. All amounts are yoctoNEAR or raw token units (18 decimals) as strings. */
 export type CoinStatus = {
   name: string;
@@ -82,6 +85,13 @@ export type CoinStatus = {
   ejectable: boolean;
   total_weight: string;
   ejected: null | EjectSnapshot;
+  /** Open Mayday, or null. One past its deadline stays until a call closes it. */
+  mayday: null | Mayday;
+  can_mayday: boolean;
+  /** End of the cooldown after a failed Mayday (0 when none). */
+  mayday_open_after_ts: number;
+  rescues: number;
+  pledges_held: string;
 };
 
 /** `holder(account_id)`: the "your seat" numbers. */
@@ -95,6 +105,12 @@ export type HolderView = {
   /** Payout if EJECT happened now (before EJECT), or the claimable payout (after). */
   reserve_part: string;
   fund_part: string;
+  /** NEAR pledged to a Mayday and not yet filled or withdrawn. */
+  pledge: string;
+  pledge_round: number;
+  pledge_state: "open" | "rescued" | "failed" | "none";
+  /** Rescue tokens waiting in escrow for this account. */
+  collectable: string;
 };
 
 export type BuyQuote = {

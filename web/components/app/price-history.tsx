@@ -17,25 +17,36 @@ const PAD = { l: 8, r: 8, t: 18, b: 8 };
  */
 /**
  * Loads the coin's chain history once for the price chart and the on-chain log. Reloads when the coin's
- * state changes: supply moves on a trade, reserve and fund move on EJECT and on every claim.
+ * state changes: supply moves on a trade, reserve and fund move on EJECT and on every claim, and the
+ * Mayday fields move on every Mayday step. Each reload runs twice, the second time a few seconds later,
+ * because the NearBlocks index can trail the chain by a few blocks.
  */
 export function useCoinHistory(coinId: string, status: CoinStatus | null) {
   const [history, setHistory] = useState<History | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const key = status ? `${status.supply}|${status.reserve}|${status.fund}|${status.ejected?.t_e ?? ""}` : "";
+  const md = status?.mayday;
+  const key = status
+    ? `${status.supply}|${status.reserve}|${status.fund}|${status.ejected?.t_e ?? ""}|${md ? `${md.round}:${md.pledged}` : ""}|${status.rescues}|${status.pledges_held}`
+    : "";
 
   useEffect(() => {
     if (!key) return;
     const ctrl = new AbortController();
-    loadHistory(coinId, ctrl.signal)
-      .then((h) => {
-        setHistory(h);
-        setError(null);
-      })
-      .catch((e) => {
-        if (!ctrl.signal.aborted) setError(e instanceof Error ? e.message : "History error");
-      });
-    return () => ctrl.abort();
+    const load = () =>
+      loadHistory(coinId, ctrl.signal)
+        .then((h) => {
+          setHistory(h);
+          setError(null);
+        })
+        .catch((e) => {
+          if (!ctrl.signal.aborted) setError(e instanceof Error ? e.message : "History error");
+        });
+    load();
+    const again = setTimeout(load, 8000);
+    return () => {
+      clearTimeout(again);
+      ctrl.abort();
+    };
   }, [coinId, key]);
 
   return { history, error };

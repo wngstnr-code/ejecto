@@ -10,6 +10,7 @@ const FILL: Record<Phase, string> = {
   alive: "bar-hud",
   dying: "bar-hot",
   ejectable: "bar-eject",
+  mayday: "bar-hot",
   ejected: "bar-muted",
 };
 
@@ -61,14 +62,19 @@ export function EngineMeter({ status, phase }: { status: CoinStatus; phase: Phas
             />
           </div>
           <Marker at={pct(line)} label="Alive line" tone="text-eject" lineClass="bg-eject" />
-          {peak > 0 && <Marker at={pct(peak)} label="Peak" tone="text-muted" lineClass="bg-muted" />}
+          {peak > 0 && (
+            // When the peak sits near the alive line (a small coin), its label moves under the bar so the two do not overlap.
+            <Marker at={pct(peak)} label="Peak" tone="text-muted" lineClass="bg-muted" shift={Math.abs(peak - line) / Math.max(peak, line, 1e-9) < 0.25} />
+          )}
         </div>
 
-        <p className="label mt-6 leading-relaxed text-muted">
+        <p className="label mt-9 leading-relaxed text-muted">
           {ejected
             ? "The seat has fired. Trading is closed for good."
-            : phase === "ejectable"
-              ? "Buys fell under the alive line. Anyone can pull the handle now."
+            : phase === "mayday"
+              ? "Mayday: the crew is pledging to buy the coin back to life. EJECT waits until the deadline."
+              : phase === "ejectable"
+                ? `Buys fell under the alive line. Anyone can pull the handle now, or hold the line: ${formatNear(Math.max(0, line - windowBuys), 3)} NEAR of buys${status.can_mayday ? " (or a Mayday)" : ""} brings it back.`
               : wait > 0
                 ? `EJECT unlocks at day ${MIN_AGE_DAYS} (in about ${formatWait(wait)}), and only if buys sit under the line.`
                 : "Below the line, anyone can press EJECT. The line is 5% of the best 14 days, at least 1 NEAR."}
@@ -124,11 +130,11 @@ function EngineOff({ status, peak, line }: { status: CoinStatus; peak: number; l
   );
 }
 
-function Marker({ at, label, tone, lineClass }: { at: string; label: string; tone: string; lineClass: string }) {
+function Marker({ at, label, tone, lineClass, shift = false }: { at: string; label: string; tone: string; lineClass: string; shift?: boolean }) {
   return (
     <div className="pointer-events-none absolute inset-y-0" style={{ left: at }}>
       <div className={`absolute bottom-0 top-5 w-0.5 -translate-x-1/2 ${lineClass}`} />
-      <div className={`label absolute top-0 -translate-x-1/2 whitespace-nowrap ${tone}`}>{label}</div>
+      <div className={`label absolute -translate-x-1/2 whitespace-nowrap ${shift ? "top-full mt-1.5" : "top-0"} ${tone}`}>{label}</div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ const PHASE_STYLE: Record<Phase, string> = {
   alive: "border-hud/50 text-hud",
   dying: "border-hazard/60 text-hazard",
   ejectable: "border-eject bg-eject text-ink",
+  mayday: "border-hazard bg-hazard text-ink",
   ejected: "border-line text-muted",
 };
 
@@ -17,6 +18,7 @@ const PHASE_ICON: Record<Phase, () => ReactNode> = {
   alive: PulseIcon,
   dying: FallingIcon,
   ejectable: EjectIcon,
+  mayday: SirenIcon,
   ejected: ParachuteIcon,
 };
 
@@ -28,6 +30,16 @@ export function PhaseBadge({ phase, className = "" }: { phase: Phase; className?
       <Icon />
       {PHASE_LABEL[phase]}
     </span>
+  );
+}
+
+/** Rotating beacon: a Mayday is open, the crew is pledging to rescue the coin. */
+function SirenIcon() {
+  return (
+    <svg viewBox="0 0 14 12" className="h-3 w-3.5 overflow-visible" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden>
+      <path d="M3.5 10V7a3.5 3.5 0 0 1 7 0v3M2 10.5h10" />
+      <path d="M7 1v1.2M2.4 2.8l.9.9M11.6 2.8l-.9.9" className="animate-[live-wave_0.9s_ease-in-out_infinite]" />
+    </svg>
   );
 }
 

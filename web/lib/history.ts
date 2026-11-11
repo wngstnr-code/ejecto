@@ -20,11 +20,15 @@ export type Trade = {
   hash: string;
 };
 
-/** One line of the on-chain log: every buy, sell, EJECT and claim, read from the contract's own events. */
+/** One line of the on-chain log: every buy, sell, EJECT, claim and Mayday step, from the contract's own events. */
 export type LogEntry = {
   /** Unix time in ms (block time of the transaction). */
   t: number;
-  kind: "buy" | "sell" | "eject" | "claim";
+  kind: "buy" | "sell" | "eject" | "claim" | "mayday" | "pledge" | "rescue" | "fail" | "collect" | "refund";
+  /** Mayday round, for the Mayday kinds. */
+  round?: number;
+  /** mayday: the target. pledge: the round's total after this pledge. */
+  extra?: number;
   account: string;
   /** buy: NEAR paid in. sell: NEAR received. eject: reserve frozen. claim: total paid out. */
   near: number;
@@ -119,6 +123,18 @@ async function chainEvents(row: TxRow, signal?: AbortSignal): Promise<ChainEvent
             const reserve = y(d.reserve_part);
             const fund = y(d.fund_part);
             events.push({ kind: "claim", account: d.account_id, near: reserve + fund, fund, reserve, tokens: unitsToTokens(d.tokens_burned) });
+          } else if (ev.event === "ejecto_mayday_open") {
+            events.push({ kind: "mayday", round: Number(d.round), account: d.opener, near: 0, fund: 0, reserve: 0, tokens: 0, extra: y(d.target) });
+          } else if (ev.event === "ejecto_pledge") {
+            events.push({ kind: "pledge", round: Number(d.round), account: d.account_id, near: y(d.amount), fund: 0, reserve: 0, tokens: 0, extra: y(d.pledged) });
+          } else if (ev.event === "ejecto_rescue") {
+            events.push({ kind: "rescue", round: Number(d.round), account: row.signer_account_id, near: y(d.pledged), fund: y(d.coinvest), reserve: 0, tokens: unitsToTokens(d.tokens) });
+          } else if (ev.event === "ejecto_mayday_fail") {
+            events.push({ kind: "fail", round: Number(d.round), account: row.signer_account_id, near: y(d.pledged), fund: 0, reserve: 0, tokens: 0, extra: y(d.target) });
+          } else if (ev.event === "ejecto_collect") {
+            events.push({ kind: "collect", round: Number(d.round), account: d.account_id, near: y(d.pledge), fund: 0, reserve: 0, tokens: unitsToTokens(d.tokens) });
+          } else if (ev.event === "ejecto_pledge_withdraw") {
+            events.push({ kind: "refund", round: Number(d.round), account: d.account_id, near: y(d.amount), fund: 0, reserve: 0, tokens: 0 });
           }
         }
       } catch {
@@ -151,7 +167,8 @@ async function mapLimit<T, R>(items: T[], n: number, fn: (item: T) => Promise<R>
  */
 export async function loadHistory(coinId: string, signal?: AbortSignal): Promise<History> {
   const rows = (await listTxns(coinId, signal)).filter((r) => r.outcomes.status !== false);
-  const METHODS = ["buy", "sell", "eject", "claim"];
+  // Transfers are listed too: the contract collects a rescuer's escrow on their next transfer.
+  const METHODS = ["buy", "sell", "eject", "claim", "mayday", "pledge", "collect", "withdraw_pledge", "ft_transfer", "ft_transfer_call"];
   const eventRows = rows.filter((r) => r.actions.some((a) => a.method && METHODS.includes(a.method)));
   const ejectRow = rows.find((r) => r.actions.some((a) => a.method === "eject"));
 
@@ -163,9 +180,12 @@ export async function loadHistory(coinId: string, signal?: AbortSignal): Promise
     const t = Number(BigInt(row.block_timestamp) / 1_000_000n);
     for (const ev of perTx[idx]) {
       log.push({ t, ...ev, hash: row.transaction_hash });
-      if (ev.kind !== "buy" && ev.kind !== "sell") continue;
-      supply = Math.max(0, supply + (ev.kind === "buy" ? ev.tokens : -ev.tokens));
-      trades.push({ t, kind: ev.kind, account: ev.account, near: ev.near, tokens: ev.tokens, supply, price: priceAtSupply(supply), hash: row.transaction_hash });
+      // Buys, sells and Mayday rescues move the supply, so they move the price.
+      if (ev.kind !== "buy" && ev.kind !== "sell" && ev.kind !== "rescue") continue;
+      supply = Math.max(0, supply + (ev.kind === "sell" ? -ev.tokens : ev.tokens));
+      const kind = ev.kind === "sell" ? "sell" : "buy";
+      // A rescue is booked under the account whose pledge completed it (a real account, so links work).
+      trades.push({ t, kind, account: ev.account, near: ev.near + (ev.kind === "rescue" ? ev.fund : 0), tokens: ev.tokens, supply, price: priceAtSupply(supply), hash: row.transaction_hash });
     }
   });
   return { trades, log, ejectAt: ejectRow ? Number(BigInt(ejectRow.block_timestamp) / 1_000_000n) : null };
