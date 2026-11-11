@@ -1,4 +1,4 @@
-//! Ejecto NEP-297 events. Standard "ejecto", version "1.1.0" (1.1 adds the Mayday events).
+//! Ejecto NEP-297 events. Standard "ejecto", version "1.2.0" (1.1 added the Mayday events, 1.2 the v3 rescue bonus and pledge refunds).
 //! Token mint and burn also emit the standard NEP-141 events (FtMint, FtBurn).
 
 use crate::{BuyQuote, EjectSnapshot, SellQuote};
@@ -8,7 +8,7 @@ use near_sdk::{env, AccountId};
 fn emit(event: &str, data: near_sdk::serde_json::Value) {
     let payload = json!({
         "standard": "ejecto",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "event": event,
         "data": [data],
     });
@@ -75,21 +75,27 @@ pub fn mayday_open(round: u32, opener: &AccountId, target: u128, deadline_ts: u6
     );
 }
 
-pub fn pledge(round: u32, account: &AccountId, amount: u128, pledged: u128) {
+pub fn pledge(round: u32, account: &AccountId, amount: u128, pledged: u128, refunded: u128) {
     emit(
         "ejecto_pledge",
-        json!({ "round": round, "account_id": account, "amount": amount.to_string(), "pledged": pledged.to_string() }),
+        json!({
+            "round": round,
+            "account_id": account,
+            "amount": amount.to_string(),
+            "pledged": pledged.to_string(),
+            "refunded": refunded.to_string(),
+        }),
     );
 }
 
-pub fn rescue(round: u32, pledged: u128, coinvest: u128, tokens: u128, price_after: u128) {
+pub fn rescue(round: u32, pledged: u128, tokens: u128, bonus_weight: u128, price_after: u128) {
     emit(
         "ejecto_rescue",
         json!({
             "round": round,
             "pledged": pledged.to_string(),
-            "coinvest": coinvest.to_string(),
             "tokens": tokens.to_string(),
+            "bonus_weight": bonus_weight.to_string(),
             "price_after": price_after.to_string(),
         }),
     );

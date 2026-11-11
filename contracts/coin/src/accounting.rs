@@ -27,6 +27,11 @@ pub struct Holder {
     pub pledge: u128,
     /// The Mayday round of `pledge` (0 when there is no pledge).
     pub pledge_round: u32,
+    /// Sum of `scaled(amount)` over this holder's pledges in `pledge_round`.
+    pub pledge_sc: u128,
+    /// Sum of `scaled(amount) * pledge time` over the same pledges. At a rescue at time `t_r` the
+    /// pledges earned `pledge_sc * t_r - pledge_tw` of weight while locked (spec section 10).
+    pub pledge_tw: u128,
 }
 
 /// Global accounting totals.

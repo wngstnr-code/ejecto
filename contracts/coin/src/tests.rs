@@ -1253,10 +1253,10 @@ fn init_by_grandparent_panics() {
 }
 
 // =====================================================================================
-// Mayday (spec section 10): crowd rescue with fund co-invest, escrow, refunds
+// Mayday (spec section 10, coin code v3): crowd rescue with a weight bonus, escrow, refunds
 // =====================================================================================
 
-fn mayday_at(c: &mut Coin, a: &AccountId, target: u128, deposit: u128, day: u64) -> Mayday {
+fn mayday_at(c: &mut Coin, a: &AccountId, target: u128, deposit: u128, day: u64) -> Option<Mayday> {
     ctx(a, deposit, at_day(day));
     c.mayday(U128(target))
 }
@@ -1361,7 +1361,7 @@ fn eject_after_the_deadline_closes_the_mayday_as_failed() {
 }
 
 #[test]
-fn rescue_fills_all_pledges_at_one_price_with_fund_coinvest() {
+fn rescue_fills_all_pledges_at_one_price_and_the_fund_pays_nothing() {
     let (mut c, users) = dying_coin();
     let fund_before = c.fund;
     let supply_before = c.token.total_supply;
@@ -1380,18 +1380,21 @@ fn rescue_fills_all_pledges_at_one_price_with_fund_coinvest() {
     assert_eq!(r.pledges_left.0, 2 * NEAR);
     assert_eq!(balance(&c, &coin_id()), r.tokens_left.0, "the escrow holds the rescue tokens");
     assert_curve_invariant(&c);
-    // co-invest = min(25% of 2 NEAR, half the fund); here the fund is small, so half of it
+    // the rescue is an ordinary buy: the fund only gains the buy fee and the dust, it pays nothing
     let fee = fee_up(2 * NEAR, 150);
-    let coinvest = (2 * NEAR / 4).min((fund_before + fee) / 2);
-    assert!(c.fund <= fund_before + fee - coinvest + 1_000_000, "fund paid the co-invest");
-    assert!(c.fund + coinvest >= fund_before + fee, "only dust may be added on top");
+    assert!(c.fund >= fund_before + fee, "the fund never pays for a rescue");
+    assert!(c.fund <= fund_before + fee + 1_000_000, "only dust is added on top of the fee");
+    // locked-time weight: only the opener's 0.5 NEAR was locked (one day); the others pledged on
+    // the rescue day itself and earned nothing yet
+    let locked = scaled((NEAR / 2) as i128) * DEMO_DAY as u128;
+    assert_eq!(r.bonus_left.0, locked);
     // one price: each pledger's tokens are proportional to the pledge
     let t3 = collect_at(&mut c, &users[3], 17);
     let t0 = collect_at(&mut c, &users[0], 17);
     let t1 = collect_at(&mut c, &users[1], 17);
     assert!(t3.abs_diff(t0 * 2) <= 2 && t0.abs_diff(t1) <= 2, "same price for everyone");
     assert_eq!(balance(&c, &coin_id()), 0, "the escrow is empty after everyone collected");
-    assert_eq!(c.get_round(1).unwrap().pledges_left.0, 0);
+    assert!(c.get_round(1).is_none(), "a settled round is deleted");
 }
 
 #[test]
@@ -1404,7 +1407,8 @@ fn collect_moves_tokens_basis_and_the_weight_earned_since_the_rescue() {
     assert_weights(&c, &all, at_day(15) / SEC);
     let before = h(&c, &users[3]);
     assert_eq!(before.pledge, NEAR);
-    // five days later the pledger collects: basis = pledge, weight = pledge x 5 days
+    // five days later the pledger collects: basis = pledge, weight = pledge x 5 days (an instant
+    // solo rescue was never locked, so it earned no locked-time weight)
     let tokens = collect_at(&mut c, &users[3], 20);
     let after = h(&c, &users[3]);
     assert!(tokens > 0 && balance(&c, &users[3]) == tokens);
@@ -1475,12 +1479,102 @@ fn pledges_are_locked_while_the_mayday_is_open() {
 }
 
 #[test]
-#[should_panic(expected = "This Mayday succeeded: collect your tokens instead")]
-fn a_filled_pledge_cannot_be_withdrawn() {
+fn withdraw_on_a_rescued_pledge_collects_instead() {
     let (mut c, users) = dying_coin();
     mayday_at(&mut c, &users[3], NEAR, NEAR, 15);
-    // collect happens automatically in most calls, but not in withdraw_pledge
-    withdraw_at(&mut c, &users[3], 16);
+    assert_eq!(withdraw_at(&mut c, &users[3], 16), 0, "no NEAR comes back from a rescue");
+    assert!(balance(&c, &users[3]) > 0, "the rescue tokens were collected");
+    assert_eq!(c.holders.get(&users[3]).unwrap().pledge, 0);
+}
+
+#[test]
+fn a_pledge_above_the_target_is_filled_up_to_it_and_the_rest_returned() {
+    let (mut c, users) = dying_coin();
+    let line = status_at(&c, 15).alive_threshold.0;
+    // the opener sends 10 times the target: only the target is spent
+    assert!(mayday_at(&mut c, &users[3], line, 10 * line, 15).is_none(), "rescued in the opening call");
+    let r = c.get_round(1).unwrap();
+    assert_eq!(r.pledges_left.0, line, "the rescue spent exactly the target");
+    assert_eq!(c.holders.get(&users[3]).unwrap().pledge, line);
+    assert_eq!(c.detector.window_buys(15), line, "the detector records the target, not the deposit");
+    assert_eq!(c.pledges_held, 0);
+}
+
+#[test]
+fn a_crossing_pledge_is_capped_at_the_target() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 5, 15);
+    pledge_at(&mut c, &users[3], 5 * NEAR, 16); // needs only 1.8 NEAR
+    let r = c.get_round(1).unwrap();
+    assert_eq!(r.pledges_left.0, 2 * NEAR);
+    assert_eq!(c.holders.get(&users[3]).unwrap().pledge, 2 * NEAR - NEAR / 5);
+}
+
+#[test]
+fn mayday_returns_the_open_round_or_none_after_an_instant_rescue() {
+    let (mut c, users) = dying_coin();
+    let m = mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 5, 15).expect("open");
+    assert_eq!((m.round, m.pledged.0), (1, NEAR / 5));
+}
+
+#[test]
+fn the_cooldown_view_starts_only_when_a_mayday_has_failed() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 5, 15);
+    assert_eq!(status_at(&c, 16).mayday_open_after_ts, 0, "an open Mayday may still succeed");
+    let expired = status_at(&c, 18);
+    assert!(expired.mayday.is_some(), "past the deadline, not closed yet");
+    assert_eq!(expired.mayday_open_after_ts, c.mayday.as_ref().unwrap().deadline_ts + 7 * c.day_length_sec);
+}
+
+#[test]
+fn a_failed_round_is_deleted_once_every_pledge_is_withdrawn() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], 2 * NEAR, NEAR / 5, 15);
+    pledge_at(&mut c, &users[1], NEAR / 5, 16);
+    withdraw_at(&mut c, &users[0], 19);
+    assert!(c.get_round(1).is_some(), "one pledge is still out");
+    withdraw_at(&mut c, &users[1], 19);
+    assert!(c.get_round(1).is_none());
+}
+
+#[test]
+fn pledges_earn_weight_while_locked_and_lose_it_on_a_full_sell() {
+    let (mut c, users) = dying_coin();
+    let opener = &users[3];
+    let w0 = h(&c, opener).weight;
+    mayday_at(&mut c, opener, NEAR, NEAR / 2, 15); // 0.5 NEAR locked from day 15
+    pledge_at(&mut c, &users[0], NEAR / 2, 17); // completes the target on day 17: rescue
+    let locked = scaled((NEAR / 2) as i128) * (2 * DEMO_DAY) as u128;
+    assert_eq!(c.get_round(1).unwrap().bonus_left.0, locked, "two days of 0.5 NEAR at risk");
+    ctx(&user("anyone"), 0, at_day(17));
+    assert_eq!(c.holder(opener.clone()).weight.0, w0 + locked, "the view shows it at once");
+    collect_at(&mut c, opener, 17);
+    assert_eq!(h(&c, opener).weight, w0 + locked, "collect moves exactly the locked-time weight");
+    assert_weights(&c, &with_escrow(&users), at_day(17) / SEC);
+    let t = balance(&c, opener);
+    sell_at(&mut c, opener, t, 17);
+    assert_eq!(h(&c, opener).weight, 0, "a full sell forfeits it, like any weight");
+    assert_weights(&c, &with_escrow(&users), at_day(17) / SEC);
+}
+
+#[test]
+fn an_instant_solo_rescue_earns_no_extra_weight() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[3], NEAR, NEAR, 15);
+    assert_eq!(c.get_round(1).unwrap().bonus_left.0, 0, "nothing was ever locked");
+    ctx(&user("anyone"), 0, at_day(15));
+    assert_eq!(c.holder(users[3].clone()).weight.0, 0);
+}
+
+#[test]
+fn a_gap_below_the_minimum_pledge_counts_as_reached() {
+    let (mut c, users) = dying_coin();
+    mayday_at(&mut c, &users[0], NEAR, NEAR / 10, 15);
+    pledge_at(&mut c, &users[1], NEAR - NEAR / 10 - 1, 16); // leaves 1 yocto
+    let st = status_at(&c, 16);
+    assert_eq!(st.rescues, 1, "a 1 yocto gap could never be filled, so the rescue ran");
+    assert_eq!(c.get_round(1).unwrap().pledges_left.0, NEAR - 1);
 }
 
 #[test]
@@ -1538,10 +1632,36 @@ fn after_eject_a_claim_collects_first_and_claims_stay_within_the_pot() {
 fn rescue_and_dump_loses_money() {
     let (mut c, users) = dying_coin();
     let attacker = &users[3];
-    mayday_at(&mut c, attacker, 3 * NEAR, 3 * NEAR, 15); // solo rescue to grab the co-invest
+    mayday_at(&mut c, attacker, 3 * NEAR, 3 * NEAR, 15); // solo rescue
     let tokens = collect_at(&mut c, attacker, 15);
     let back = sell_at(&mut c, attacker, tokens, 15);
     assert!(back < 3 * NEAR, "rescue and dump must lose: got back {back}");
+}
+
+/// The v2 co-invest paid a lone rescuer out of the fund (review finding: +2.44 NEAR on a 7 NEAR
+/// fund). With v3 the fund spends nothing, so the same attack loses the fees.
+#[test]
+fn rescue_and_dump_loses_money_with_a_large_fund() {
+    let mut c = setup_demo(FeePreset::Standard);
+    let users = crew();
+    for u in &users {
+        register(&mut c, u);
+    }
+    for _ in 0..20 {
+        let t = buy_at(&mut c, &users[0], 10 * NEAR, 0);
+        sell_at(&mut c, &users[0], t, 0);
+    }
+    buy_at(&mut c, &users[1], 5 * NEAR, 0);
+    let st = status_at(&c, 15);
+    assert!(st.ejectable && st.fund.0 > 6 * NEAR, "a dying coin with a large fund");
+    let fund_before = st.fund.0;
+    let attacker = &users[3];
+    let target = st.alive_threshold.0 * 3;
+    mayday_at(&mut c, attacker, target, target, 15);
+    let tokens = collect_at(&mut c, attacker, 15);
+    let back = sell_at(&mut c, attacker, tokens, 15);
+    assert!(back < target, "rescue and dump must lose: pledged {target}, got back {back}");
+    assert!(c.fund > fund_before, "the fund only grew (fees), it paid nothing");
 }
 
 #[test]
@@ -1577,7 +1697,7 @@ fn random_ops_with_maydays_keep_all_invariants() {
                 let target = line + line * (rnd() as u128 % 3) / 2;
                 let dep = target / 10 + (rnd() as u128 % 6) * NEAR / 10;
                 mayday_at(&mut c, u, target, dep, day);
-                total_in += dep;
+                total_in += dep.min(target); // the part above the target is sent back
             }
             1 if st
                 .mayday
@@ -1585,8 +1705,10 @@ fn random_ops_with_maydays_keep_all_invariants() {
                 .is_some_and(|m| at_day(day) / SEC < m.deadline_ts && (v.pledge_round == m.round || free_to_pledge)) =>
             {
                 let a = NEAR / 10 + (rnd() as u128 % 8) * NEAR / 5;
+                let m = st.mayday.as_ref().unwrap();
+                let room = m.target.0 - m.pledged.0;
                 pledge_at(&mut c, u, a, day);
-                total_in += a;
+                total_in += a.min(room); // the part above the target is sent back
             }
             2 => {
                 let a = MIN_BUY + (rnd() as u128 % 4) * NEAR / 10;
