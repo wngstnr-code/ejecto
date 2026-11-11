@@ -67,7 +67,7 @@ Done when: a judge can open the hosted page, connect a testnet wallet, and run t
 - [x] `README.md` with "do X, see Y" steps for the hosted demo, local run, tests and simulation
 - [x] List libraries and AI-generated code in the README (rule Q-005)
 - [x] LICENSE (MIT)
-- [x] Demo video (about 3 minutes, follow the script in `hackathon.md`): 2:53, real testnet run
+- [x] Demo video (about 3 minutes, follow the script in `hackathon.md`): final cut 2:54, real testnet run of `$MOON` on `fleet.ejecto.testnet`, posted on X
 - [ ] X post: says it was built at NEAR HACKATHON, tags @NEARProtocol and #NEARHackathon, includes the video. Posted by the user.
 - [ ] Submission form at nearhackathon.com/#apply (tracks: memecoins, social). Submitted by the user.
 - [ ] Final check: `node scripts/check-dashes.mjs`, all tests pass, hosted demo works

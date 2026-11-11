@@ -6,14 +6,14 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Item | Value |
 |---|---|
-| Phase | Factory frozen and keyless (2026-11-11), final demo video rendered locally (2:54). Next: the user posts the video on X, recheck competitors, the user submits |
+| Phase | Done and frozen: factory keyless, final demo video posted on X (https://x.com/Dudung_gg/status/2120481271784824863). Next: recheck competitors near the deadline, then the user submits |
 | Overall | Review of stages 1 to 4 found a fund drain in the v2 Mayday (co-invest); fixed in coin code v3 (locked-time pledge weight). 100 coin unit tests, 18 factory unit tests, 5 sandbox tests. Chain check covers all three factories. |
 | Deadline | 2026-11-14 23:59 UTC (2026-11-15 06:59 WIB) |
 | Days left | 3.5 (as of 2026-11-11) |
 
 ## Next step (exact)
 
-0. Done: final demo video (`video/out/ejecto-final.mp4`, local only, all new footage of `moon.fleet.ejecto.testnet`), factory frozen (tx `8ETkUY26JiNWuMGSGryVpYdmMfVDediafFxCTt8rDETo`) and its only key deleted, `verify-chain` checks both. Next: the user posts the video on X and updates the demo link, recheck competitors, the user submits by 2026-11-14. Vercel has no env vars: the web uses the `FACTORY_ID` default in `web/lib/config.ts`.
+0. Done: final demo video (`video/out/ejecto-final.mp4`, local only, all new footage of `moon.fleet.ejecto.testnet`), factory frozen (tx `8ETkUY26JiNWuMGSGryVpYdmMfVDediafFxCTt8rDETo`) and its only key deleted, `verify-chain` checks both. Final video posted by the user on X: https://x.com/Dudung_gg/status/2120481271784824863 (README demo link and demo run table updated to `$MOON`). Next: recheck competitors near the deadline, then the user submits by 2026-11-14 23:59 UTC. Vercel has no env vars: the web uses the `FACTORY_ID` default in `web/lib/config.ts`.
 1. Done for buy, EJECT and claim (see the session log). Launch from the `/launch/` form (`wngst`) and sell (`2hVG73vDZ8XEkZTEYxJKqt6Y7XeAnegwGnAoBG5cykP2`, 2% fund fee on the gross) also done. Every flow has now run on testnet. For the demo video use a fresh coin and buy more than 1 NEAR in total within the first 140 s (10 s days), or use longer demo days, so the coin is alive before it dies.
 2. Check the app pages and the landing at phone width.
 3. Done: live at https://ejecto.vercel.app (Vercel, D-031). Check the CI run on GitHub after each push.
@@ -209,7 +209,7 @@ Funding note (2026-11-11): the faucet service (`helper.nearprotocol.com/account`
 - Repo made public with the user's approval. Contracts verified on NearBlocks: reproducible Docker builds (SourceScan image pinned by digest, D-029), factory state cleared and redeployed, Seato ($SEAT) launched with a generated coin logo. Landing safeguards use an animated broadcast icon for live reads. The landing always starts at the top for the intro.
 - End-to-end on testnet with the user's NEAR CLI wallet on `seat`: buy 0.01 NEAR from the coin page (`storage_deposit` + `buy` in one tx, `Dj3Uizqn3CqQZtNgPW339vfWjmvvUrPtc3ybKTMHpAyG`), EJECT (`GqdoULbw6mWEMd7Tbh26LFzKsqdaUU6ngHHMNP5SagES`), claim 0.00995 NEAR = reserve 0.0098 + fund 0.00015 (`26zjMv26FQVG1UtVKx2cbXsLVKFQUPMdCKDmZ9JmkuZb`). NEAR CLI wallet note: when a command runs without a terminal (for example through `!`), append `send`.
 - README (judge facing: mechanic, why NEAR, "do X, see Y" steps for the hosted app, wallet-free verification, the demo run with real tx hashes, local run, tests, simulation, limits, tools used) and MIT LICENSE added.
-- X post published by the user on 2026-11-10: https://x.com/Dudung_gg/status/2120172645438374353 (demo post link for the submission form).
+- X post published by the user on 2026-11-10: https://x.com/Dudung_gg/status/2120172645438374353 (superseded on 2026-11-11 by the final video post https://x.com/Dudung_gg/status/2120481271784824863, which is the link for the submission form).
 - Video (folder `video/`, kept local only and excluded from git on request, Remotion): `EjectoAd` (45 s, 9:16, 3D pilot and real coin logos, captions in the style of two reference ads) and `EjectoDemo` (about 2:47, 16:9). The demo is a real run on testnet recorded with Playwright (`scripts/record-demo.mjs`): launch of $PILOT from the web form, ani 0.5, budi 0.6, cici 0.3 NEAR buys, a whale 0.4 NEAR buy right before EJECT, EJECT from the web, claims (ani in the web, the rest with near-cli). Results: ani +33%, budi -3%, cici -17%, whale -26%. Voiceover generated locally with Kokoro TTS (Apache 2.0), music by Kevin MacLeod (CC BY 4.0, credited in the video and in `video/public/music/CREDITS.txt`). UI cards for the ad captured with `scripts/capture-ui.mjs`.
 - Hosted on Vercel at https://ejecto.vercel.app (D-031, deployed by the user). Smoke test: every page 200, both GLB models and brand assets served, `og:image` and `twitter:image` point to the Vercel URL. GitHub Actions CI added (`.github/workflows/ci.yml`).
 - `/seats/` (My seats): every coin the wallet holds, ready-to-claim cards with a Claim button, flying table with the payout if ejected now, landed list. Linked in the app header and the footer.
