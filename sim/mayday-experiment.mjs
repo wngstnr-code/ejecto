@@ -1,4 +1,4 @@
-// Experiment: what does a Mayday (crew rescue, spec section 10, coin code v2) do to the crew?
+// Experiment: what does a Mayday (crew rescue, spec section 10, coin code v3) do to the crew?
 // Usage: node sim/mayday-experiment.mjs [sim/out]   (writes <out>/mayday.json, about 40 s)
 // This is a MODEL, using the same agents and seeds as sim/ejecto-sim.mjs. Pledging behavior is an
 // assumption, so the scenarios bracket it: no new demand after a rescue (pessimistic) and some (optimistic).
@@ -70,19 +70,22 @@ function scenario(name, mayday, grief) {
   };
 }
 
-const crew = { pledgeProb: 0.3, pledgeFrac: 0.5, targetMult: 2 };
+// v3 (spec section 10): the rescue spends exactly the target (pledges above it are scaled down), the
+// fund spends nothing, and each pledge earns weight for the time it was locked before the rescue. The
+// model pledges at one moment, so the locked time is bracketed: 0 days (lower bound) and 3 days, the
+// whole Mayday (upper bound; `bonusDays` adds pledge x days of weight).
+const crew = { pledgeProb: 0.3, pledgeFrac: 0.5, targetMult: 2, cap: true };
 const result = {
   model: true,
-  assumptions: 'When the coin becomes ejectable, each holder aboard pledges half of what they first put in, with probability 0.3; target 2 x the alive line. Co-invest: the fund adds 25% of the pledges, at most half of the fund.',
+  assumptions: 'When the coin becomes ejectable, each holder aboard pledges half of what they first put in, with probability 0.3; target 2 x the alive line; pledges above the target are scaled down to it. Locked-time weight is bracketed: pledges locked 0 days or the full 3 days before the rescue.',
   scenarios: [
-    scenario('Mayday alone, no new demand', { ...crew, newcomers: 0 }),
-    scenario('Mayday alone, 40 newcomers after a rescue', { ...crew, newcomers: 40 }),
-    scenario('Mayday + fund co-invest 25%, no new demand', { ...crew, newcomers: 0, coinvest: 0.25 }),
-    scenario('Mayday + fund co-invest 25%, 40 newcomers', { ...crew, newcomers: 40, coinvest: 0.25 }),
-    scenario('Mayday + co-invest 25% + 7-day lock on rescue tokens, no new demand', { ...crew, newcomers: 0, coinvest: 0.25, lockDays: 7 }),
-    scenario('Mayday + co-invest 25% + 7-day lock, 40 newcomers', { ...crew, newcomers: 40, coinvest: 0.25, lockDays: 7 }),
-    scenario('Rescue and dump: an attacker pledges 20 NEAR to every Mayday and sells at once (co-invest 25%, no lock)', { ...crew, newcomers: 0, coinvest: 0.25, attacker: 20 }),
-    scenario('Griefed coin (flash 2,000 NEAR on day 2), crew calls Mayday, no new demand', { ...crew, newcomers: 0, coinvest: 0.25 }, { day: 2, x: 2000, hold: 0 }),
+    scenario('v3, pledges locked 0 days, no new demand', { ...crew, newcomers: 0 }),
+    scenario('v3, pledges locked 3 days, no new demand', { ...crew, bonusDays: 3, newcomers: 0 }),
+    scenario('v3, pledges locked 0 days, 40 newcomers after a rescue', { ...crew, newcomers: 40 }),
+    scenario('v3, pledges locked 3 days, 40 newcomers after a rescue', { ...crew, bonusDays: 3, newcomers: 40 }),
+    scenario('v3 rescue and dump: an attacker pledges 20 NEAR to every Mayday and sells at once', { ...crew, newcomers: 0, attacker: 20 }),
+    scenario('v2 for reference: fund co-invest 25%, no new demand (dropped: it pays a rescue and dump)', { ...crew, cap: false, newcomers: 0, coinvest: 0.25 }),
+    scenario('v3 on a griefed coin (flash 2,000 NEAR on day 2), no new demand', { ...crew, bonusDays: 3, newcomers: 0 }, { day: 2, x: 2000, hold: 0 }),
   ],
 };
 fs.mkdirSync(OUT, { recursive: true });

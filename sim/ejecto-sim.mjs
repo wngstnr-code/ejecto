@@ -119,7 +119,9 @@ class Market {
 
 // opts.weighting: fund weighting at EJECT. opts.grief: { day, x, hold } an attacker buys x NEAR on `day`
 // and sells it all `hold` days later (0 = the same day), to inflate the peak window.
-// opts.mayday (coin code v2, spec section 10): { pledgeProb, pledgeFrac, targetMult, newcomers }.
+// opts.mayday (coin code v2 and v3, spec section 10): { pledgeProb, pledgeFrac, targetMult, newcomers,
+// bonusDays, coinvest, cap, lockDays, attacker }. v3 is { bonusDays: 7, cap: true } with no coinvest:
+// the rescue spends exactly the target (pledges scaled down pro-rata, the excess goes back).
 // When the coin becomes ejectable, holders still aboard pledge with probability pledgeProb a share
 // pledgeFrac of what they put in; the target is targetMult x the alive line. Success executes one batch
 // buy; `newcomers` new buyers then arrive over the next 7 days (0 = no new demand, the pessimistic case).
@@ -149,7 +151,8 @@ export function run(seed, mode, opts = {}) {
       for (const a of agents) { if (a.id === 888888) continue; const h = m.h.get(a.id); if (h && h.bal > 0 && md.r() < md.pledgeProb) pledges.set(a.id, a.amt * md.pledgeFrac); }
       // Optional attacker: pledges `attacker` NEAR to every Mayday and sells as soon as it can (rescue and dump).
       if (md.attacker) { if (!agents.some((a) => a.id === 888888)) agents.push({ id: 888888, day: 9999, amt: md.attacker, tp: 1.0, sl: 0, bored: Array(DAYS).fill(1), order: 0 }); pledges.set(888888, md.attacker); }
-      const total = [...pledges.values()].reduce((x, y) => x + y, 0);
+      let total = [...pledges.values()].reduce((x, y) => x + y, 0);
+      if (md.cap && total > target) { for (const [id, x] of pledges) pledges.set(id, (x * target) / total); total = target; }
       if (total >= target) {
         m.rescueBuy(pledges, day + 0.5, day, md.bonusDays ?? 0, md.coinvest ?? 0); m.updPeak(day); md.rescues++;
         for (const id of pledges.keys()) { md.pledgers.add(id); entry.set(id, price(m.s)); if (md.lockDays) md.lockedUntil.set(id, day + md.lockDays); }
