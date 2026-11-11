@@ -144,7 +144,8 @@ export function ClaimPanel({
 
   const reservePart = holder ? yoctoToNear(holder.reserve_part) : 0;
   const fundPart = holder ? yoctoToNear(holder.fund_part) : 0;
-  const hasSeat = !!holder && BigInt(holder.balance) > 0n;
+  // Rescue tokens still in escrow count: claim collects them first.
+  const hasSeat = !!holder && BigInt(holder.balance) + BigInt(holder.collectable ?? "0") > 0n;
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-panel">

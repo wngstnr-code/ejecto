@@ -308,3 +308,10 @@ html.lenis body {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Mayday header: the hazard tape runs while the rescue is open. One stripe period is 28px * sqrt(2). */
+@keyframes hazard-run {
+  to {
+    background-position: 39.6px 0;
+  }
+}

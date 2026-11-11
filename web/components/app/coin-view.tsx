@@ -12,6 +12,7 @@ import { useWallet } from "@/lib/wallet";
 import { CurveChart } from "./curve-chart";
 import { ActivityLog } from "./activity-log";
 import { CrewBoard } from "./crew-board";
+import { MaydayCallPanel, MaydayCooldown, MaydayOpenPanel, PledgeCard } from "./mayday-panel";
 import { PriceHistory, useCoinHistory } from "./price-history";
 import { EngineMeter } from "./engine-meter";
 import { ClaimPanel, EjectPanel, SeatPanel } from "./seat-panels";
@@ -89,6 +90,11 @@ export function CoinView({ id }: { id: string | null }) {
                 {keys === null ? "Checking keys" : `${keys} access keys`}
               </span>
               <span>Fee {status.fee_preset}</span>
+              {status.rescues > 0 && (
+                <span className="text-hud" title="Maydays that brought this coin back to life">
+                  Rescued {status.rescues}x
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -106,7 +112,7 @@ export function CoinView({ id }: { id: string | null }) {
         </div>
 
         <div className="mt-12 grid gap-12 lg:grid-cols-[1fr_400px]">
-          <div className="space-y-16">
+          <div className="min-w-0 space-y-16">
             <EngineMeter status={status} phase={phase} />
             <PriceHistory status={status} history={chain.history} error={chain.error} />
             <CurveChart status={status} />
@@ -124,15 +130,24 @@ export function CoinView({ id }: { id: string | null }) {
                 onDone={refresh}
                 claimedNear={chain.history?.log.find((e) => e.kind === "claim" && e.account === accountId)?.near ?? null}
               />
+            ) : phase === "mayday" ? (
+              <>
+                <MaydayOpenPanel coinId={id} status={status} history={chain.history} holder={holder} onDone={refresh} />
+                <TradePanel coinId={id} status={status} holder={holder} onDone={refresh} />
+              </>
             ) : phase === "ejectable" ? (
               <>
                 <EjectPanel coinId={id} onEjected={onEjected} />
+                {status.can_mayday ? <MaydayCallPanel coinId={id} status={status} holder={holder} onDone={refresh} /> : <MaydayCooldown status={status} />}
+                {/* A Mayday past its deadline that no call has closed yet: show how it ended. */}
+                {status.mayday && <MaydayOpenPanel coinId={id} status={status} history={chain.history} holder={holder} onDone={refresh} />}
                 {/* Until someone pulls the handle the curve is still open, and buys can restart the engine. */}
                 <TradePanel coinId={id} status={status} holder={holder} onDone={refresh} revive />
               </>
             ) : (
               <TradePanel coinId={id} status={status} holder={holder} onDone={refresh} />
             )}
+            <PledgeCard coinId={id} holder={holder} onDone={refresh} />
             {phase !== "ejected" && <SeatPanel status={status} holder={holder} />}
           </aside>
         </div>
