@@ -6,13 +6,14 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Item | Value |
 |---|---|
-| Phase | M4 (web app) in progress: landing and app pages built, signed-transaction test next |
-| Overall | Contracts reviewed (M1 to M3), fixed and live on testnet. 71 coin unit tests, 15 factory unit tests, 3 sandbox integration tests. Landing and app pages (`/coins/`, `/launch/`, `/coin/?id=`) built in `web/` (Next.js 16 static export), wallet via NEAR Connect. |
+| Phase | Mayday v2, stage 4 of 7 done (web on factory v2 with the Mayday UI). Next: stage 5 (README, chain check, mechanism note) |
+| Overall | Coin v2 and factory v2 live on testnet at `coins.ejecto.testnet` and verified. 91 coin unit tests, 18 factory unit tests, 5 sandbox tests. Web reads factory v2 (Mayday panels, Longest seat, rescuer badges). Local only, not committed yet. |
 | Deadline | 2026-11-14 23:59 UTC (2026-11-15 06:59 WIB) |
 | Days left | 4.5 (as of 2026-11-10) |
 
 ## Next step (exact)
 
+0. Mayday v2 stages: 5) `scripts/verify-chain.mjs` gets the v2 coin hash and `pledges_held` in the balance check, `.github/workflows/chain.yml` checks `coins.ejecto.testnet`, README rewrite (Mayday built, sim results, new Jury Seats, v1 archive), `docs/mechanism.md`, claims to tests table. Then freeze the factory and delete its key (user approved), 6) re-record the demo video, 7) submit. The user must set the Vercel env `NEXT_PUBLIC_FACTORY_ID` to `coins.ejecto.testnet` (or remove it) before the next deploy.
 1. Done for buy, EJECT and claim (see the session log). Launch from the `/launch/` form (`wngst`) and sell (`2hVG73vDZ8XEkZTEYxJKqt6Y7XeAnegwGnAoBG5cykP2`, 2% fund fee on the gross) also done. Every flow has now run on testnet. For the demo video use a fresh coin and buy more than 1 NEAR in total within the first 140 s (10 s days), or use longer demo days, so the coin is alive before it dies.
 2. Check the app pages and the landing at phone width.
 3. Done: live at https://ejecto.vercel.app (Vercel, D-031). Check the CI run on GitHub after each push.
@@ -97,6 +98,25 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 - Mayday v2 (D-038, supersedes D-037): stage 1 done (spec section 10 rewritten as the full design with fund co-invest and no lock; `sim/mayday-experiment.mjs` passes the broad gate). Stage 2 done: coin code v2 (`mayday`, `pledge`, `collect`, `withdraw_pledge`, `get_round`, escrow held by the coin account, transfers to the coin and unregister with a pledge refused, `status` and `holder` extended, events 1.1.0) with 20 new unit tests (91 in total, including 600 random steps that check every invariant with Maydays); factory v2 with `freeze()` (18 unit tests); sandbox 5 tests (Mayday with 10 pledgers: open 2.3 Tgas, last pledge plus rescue 3.5 Tgas). Coin wasm 264 KB. A view bug found by the random test (`can_mayday` true for an expired, unclosed Mayday) was fixed. Next: stage 3, deploy `coins.ejecto.testnet`, reproducible build and verification, new coins, freeze. README edits (TL;DR, jury seats, Mayday table) are held back until stage 5.
 - Crew board (holders ranked by loyalty, live from `holder`) and "Share my seat" / "Share my parachute" X intents on the coin page and My seats; README gains a Social Money section (D-035). meme.cooking: read its docs (deposit countdown, then a Ref pool locked 69 years, launchpad contract closed source); a real integration would need a new contract and pool data from outside the coin, so it stays out of scope; the README explains how the two fit together (birth and death of a memecoin) and names an Ejecto seat for AMM tokens as future work.
 
+## Review notes (2026-11-11, stage 4 web)
+
+Deep review of the stage 4 web diff (build, spec section 10 next to the UI, code review, docs).
+
+| Finding | Fix |
+|---|---|
+| UI let a pledge under 0.001 NEAR or a second open pledge (earlier failed one not withdrawn) reach the wallet, where the contract refuses it | Both checked in the panels, with a message pointing to the pledge card |
+| Spec named `mayday_open_after_day` and missed `pledges_held` | Spec now matches the contract (`mayday_open_after_ts`, `pledges_held`) |
+| `architecture.md` had no Mayday at all (stale since stage 2) | Updated: state, methods, escrow, events, gas, factory `freeze()`, coin page, security rows, tests |
+| Opening pledge input could not be cleared | Input state is null for "the minimum", reset when the target changes |
+| Collects that run inside `ft_transfer` were not read | `ft_transfer` and `ft_transfer_call` added to the history methods |
+| Rescue trade used a fake account name in an explorer link | Booked under the account whose pledge completed the rescue |
+| No hint during the 7-day cooldown, and the engine text offered a Mayday that could not be called | Cooldown card with a countdown; engine text checks `can_mayday` |
+| Fund co-invest preview ignored the rescue's own fund fee and an overshooting last pledge | Same order as the contract: fee first, then `min(25% pledged, 50% fund)` |
+| Rescuer streaks started at the pledge, and uncollected rescuers had none | Streaks start at the rescue for every pledger of that round |
+| Badge stayed "Mayday" up to one poll after the deadline | The panel refreshes the status when the deadline passes |
+| Dead `getRound` view helper | Removed |
+| Accepted: history loads twice per change (second load 8 s later for NearBlocks lag) | At most 10 NearBlocks calls per change; kept for correctness, watch for HTTP 429 |
+
 ## Review notes (2026-11-10, pre-submission)
 
 - Phone check at 390 px (Playwright, every page): the live landing scrolled sideways by 58 px (hero title too wide). Fixed: hero, Safeguards and The Math headings scale with the viewport, the crash readouts use a 2x2 grid, the crash stage text shows only the active stage, the 3D pilot shrinks away after the hero on phones so it never covers text, the Coins table becomes a two-column list (price and fund under the name), the demo banner is shortened. No horizontal overflow left on any page.
@@ -126,6 +146,8 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 | Demo coin Seato ($SEAT) | `seat.factory.ejecto.testnet` | Launched 2026-11-10 by `founder.ejecto.testnet` (tx `EmfZJLE1hHL2aokCcWwhjJzqrHh65okYJ6rk21siQDtH`), icon `web/public/brand/seat-coin.svg`, demo time 10 s per day, 0 access keys, source verified on NearBlocks. Alive line floor is 1 NEAR, so with smaller buys it is ejectable right after day 14. |
 | Jury coins ($JURY1, $JURY2, $JURY3) | `jury1..3.factory.ejecto.testnet` | Launched 2026-11-10 19:05 UTC for judges (D-036), demo time 10 s, crew ani 0.3, budi 0.2, cici 0.1 NEAR, ready to EJECT. Launch txs `JTwpaR26NacWR9bJB8C3xB7kfZKLxSHrhX9XPp6oizt`, `HakWeoLKrjKdb6gqobJoHtrCUxi5Rzuz56bkYcECKFs1`, `AyxymL4cqpzJteRU84hckGn32gtAaAkqncRK4aEtX5e5`. |
 | Jury coins 4 to 8 | `jury4..8.factory.ejecto.testnet` | Launched 2026-11-10 19:34 UTC, same setup as jury 1 to 3 (D-037). Eight Jury Seats in total. |
+| **Factory v2** | `coins.ejecto.testnet` | Deployed 2026-11-11 (tx `2FuRTSTqNTMDLyJSrHJo5rBVimhiGYAG6txL9TD13iG5`), owner `ejecto.testnet`, coin code `e4092754...2e55` (263,494 bytes, launch deposit 2.93494 NEAR). Factory and coin source verified on NearBlocks at commit `ef0d663`. Not frozen yet: `freeze()` and the key deletion are planned right before submission, after the web integration. |
+| v2 coins | `seat`, `wngst` (real days, old logos), `jury1..6`, `phoenix`, `crash` (demo time, new logos) `.coins.ejecto.testnet` | Jury Seats: crew ani 0.3, budi 0.2, cici 0.1 NEAR, ready to EJECT or Mayday. Phoenix: Mayday round 1 failed and both pledges were withdrawn in full, round 2 rescued it (ani 0.3, budi 0.4, cici 0.3, target 1 NEAR), all collected. Crash Test: no crew, left for hand testing. All keyless; `verify-chain` passes every coin check. |
 | Demo coin Pilot ($PILOT) | `pilot.factory.ejecto.testnet` | Launched 2026-11-10 from the web form for the demo video (tx `FQz2inaghVdmw7ZBzi9a1GxxdicHkh12FFg7hs4BpVt2`), demo time 10 s, ejected and fully claimed. Source verified (same code). |
 | Real-days coin Wangsit ($WNGST) | `wngst.factory.ejecto.testnet` | Launched 2026-11-10 from the `/launch/` form by `founder.ejecto.testnet` (tx `FmYjG6CGwryhYPckiwfQzHXcooHzvZ2iUrNJzs6GKZWF`), 24 h days, uploaded icon (WebP), 0 access keys, source verified (same code hash as `seat`). EJECT possible from about 2026-11-24. |
 | Verification coin (ejected, old code, no longer listed) | `seato.factory.ejecto.testnet` | Runs the coin code from before the review fixes. Harmless: it is ejected, so trading and transfers are closed. Launched (tx `CKQoSYdagkzE2rRt69MsqChDc3JMMP9MfPHNiB5Wnjxq`), 0 access keys, demo time 10 s per day. Ani 1, Budi 1.2, Cici 0.6 NEAR buys, Cici sold half. EJECT tx `BR59JVbnNF3zke6wc4c3aRoryFj1CQ7DxRxKxDV4f2Tu`. Claims: Ani 1.2769, Budi 1.0055, Cici 0.2080 NEAR, each equal to the holder view. 2 yocto dust left. |
@@ -145,6 +167,11 @@ Checks: `cargo fmt --check`, `cargo clippy -- -D warnings`, all tests, rebuilt w
 
 ## Session log
 
+### 2026-11-11
+
+- Stage 4 (web on factory v2): `near.ts` reads the v2 `status` and `holder` fields and `get_round`; new phase `mayday` (siren badge) that blocks the EJECT panel while open; history parses the six Mayday events (log labels Mayday, Pledge, Rescue, Failed, Collect, Refund; a rescue moves the price chart). New `mayday-panel.tsx`: Call a Mayday (target 1x to 3x the line, opener pledge at least 10%, fund co-invest shown), the open Mayday (progress, chain-synced countdown, pledgers, pledge and "fill the rest"), and a pledge card (collect after a rescue, withdraw after a failure). Engine meter says how much buying revives a dying coin. Crew board: Longest seat high score (streaks from the token flows, a rescuer's streak starts at the rescue), Rescuer badges, pledgers with tokens still in escrow count as crew. Coin header shows "Rescued Nx".
+- Tested the open and ended Mayday views on `crash` (founder opened Mayday 1 with 0.1 NEAR, it failed after 30 s, pledge withdrawn in full: tx `4uQHjCLBwUtXEr611gjUCavTqL13fR6nKfYeNmp1enkg`, `CHZJNV2pUuRW7NExNjZay154Wo3rBV2FjyogoUQgfJdZ`).
+- Fixes found while testing: history did not reload on Mayday steps (key now includes the Mayday fields, plus a second fetch 8 s later for NearBlocks lag); the Crew board stayed a skeleton on a coin with no buys; Phoenix overflowed the phone width by 3 px (left column now `min-w-0`); Peak and Alive line labels overlapped on small coins.
 ### 2026-11-10
 
 - M4 started. Scaffolded `web/` with Next.js 16.4.5, Tailwind 4, TypeScript, static export, root `.env` via `@next/env`, `agentRules: false` (stops Next from writing an `AGENTS.md` full of em dashes).
