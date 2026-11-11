@@ -27,7 +27,7 @@ Update this file at the end of every session and after every milestone. Newest e
 | When to make the GitHub repo public (must be public before the deadline) | user | open |
 | Wallet package for the web app | dev | closed: NEAR Connect (D-027) |
 | Contract verification on NearBlocks | dev | closed: factory and `seat` verified (D-029) |
-| Source and license of both pilot GLBs, `ejecto-pilot.glb` and `ejecto-pilot-wave.glb` (needed for the README credits) | user | open |
+| Source and license of both pilot GLBs, `ejecto-pilot.glb` and `ejecto-pilot-wave.glb` | user | closed: made by the user, no credit line needed |
 
 ## Milestone checklist
 
