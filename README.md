@@ -11,7 +11,7 @@ Ejecto is a memecoin launchpad on NEAR where every coin has an ejection seat. Ea
 | | |
 |---|---|
 | Live app (NEAR testnet) | https://ejecto.vercel.app |
-| Demo video | https://x.com/Dudung_gg/status/2120172645438374353 |
+| Demo video | https://x.com/Dudung_gg/status/2120481271784824863 |
 | Factory contract (source verified, frozen, keyless) | [`fleet.ejecto.testnet`](https://testnet.nearblocks.io/address/fleet.ejecto.testnet/contract/code) |
 | A coin rescued by its crew (one failed Mayday, one rescue) | [`phoenix.fleet.ejecto.testnet`](https://ejecto.vercel.app/coin/?id=phoenix.fleet.ejecto.testnet) |
 | Mechanism note, every claim mapped to its test | [`docs/mechanism.md`](docs/mechanism.md) |
@@ -174,20 +174,25 @@ Coin `$PHOENIX` on the live factory, demo time 10 s per day.
 
 ### The demo run, on chain
 
-Recorded in the demo video, on the first factory (`factory.ejecto.testnet`, coin code v1, now an archive). Coin `$PILOT`, demo time 10 s per day.
+Recorded in the [demo video](https://x.com/Dudung_gg/status/2120481271784824863), on the live factory (`fleet.ejecto.testnet`, coin code v3). Coin Mayday Moon (`$MOON`, `moon.fleet.ejecto.testnet`), demo time 10 s per day. The coin dies, the crew rescues it with a Mayday, it dies again, and then it is ejected.
 
 | Step | Account | Transaction | Result |
 |---|---|---|---|
-| Launch from the web form | founder.ejecto.testnet | `FQz2inaghVdmw7ZBzi9a1GxxdicHkh12FFg7hs4BpVt2` | keyless coin |
-| Buy 0.5 NEAR | ani.ejecto.testnet | `DeCroHC5mfk8uA73euddMBmDwct3ZoQvJWtYAsrgXAxQ` | |
-| Buy 0.6 NEAR | budi.ejecto.testnet | `HdssESJcYZh7nHj8ELmJC63bDLPitbG2qzemmrsRnnLJ` | |
-| Buy 0.3 NEAR | cici.ejecto.testnet | `4S6Uu9cPs6UaMEKsksJBvtnCR5Qg5tFet18DadPSkuqn` | |
-| Whale buys 0.4 NEAR right before EJECT | whale.ejecto.testnet | `Gcbq1ydArgCqDppzb9Jpo6v3uxQejLXSrJsebfuH5uit` | tries to farm the fund |
-| EJECT from the web | founder.ejecto.testnet | `3SFynGmm1EStoLWMq937QCtab6Y3xtqePwS1vaX8Tpkq` | snapshot frozen |
-| Claim | ani | `AfHFxnZ9SeyUZpWtbxh1549Awaapovopch6aYmcVrL2J` | 0.664 NEAR (**+33%**) |
-| Claim | budi | `4ejTcWt1nCVkRu6zDXk2H1dxnQAxhku2HhFHsoNbNbFR` | 0.584 NEAR (-3%) |
-| Claim | cici | `J5FspvufBhJNxmHU75w87Q1PE6AGgg3DLeHzUB5kus49` | 0.248 NEAR (-17%) |
-| Claim | whale | `2awYR8dKe2HFPjsiMwULtcZfPvGSqef8yt6fwv6UANwV` | 0.295 NEAR (**-26%**): farming loses |
+| Launch | founder.ejecto.testnet | `D8TMNWPQmCR6dZxQMuwSgrCAL6Amz7fwZeHbDTMUXZSv` | keyless coin |
+| Buy 0.5 NEAR | ani.ejecto.testnet | `Bro1dMsobjuU6CywNc6zPcLfvgMq5CUW7TbLL5ptX52V` | |
+| Buy 0.4 NEAR | budi.ejecto.testnet | `7TsmH75jKWGgDV3xK1pSmkzLAaore7ZotUtEqYKQmoDX` | |
+| Buy 0.3 NEAR | cici.ejecto.testnet | `ExowzuePHmntEpLPGRgiAG8McitPavBCZJ5CtpDHLy6W` | |
+| Mayday: target 1 NEAR, opener pledges 0.1 | founder | `E5kCkLiwbvgCg26D9iHvyeFxNoB2bkPuX4Bmuk2mhDGD` | round 1 open |
+| Pledge 0.4 | ani | `95PxWCQUt9tamUUbFX4DD7xioRaiiVnif8tuuA5RzMvA` | |
+| Pledge 0.3 | budi | `4jYupV1CKz7Grukf52KeptZcmzkz2X46L3bfm6qxrwUw` | |
+| Pledge 0.2 fills the target | founder | `JBKcVnZg5qWLqzGBfdyuLarNeZxXQx2yjBukM5WbXqEa` | **rescue**: one buy of 1 NEAR at one price |
+| EJECT | founder | `EfZ2QccyPjqpUPZygtGm27S6SSRcVPxVpHNfJPb4wgmL` | reserve 2.156 + fund 0.033 NEAR frozen |
+| Claim (collects the rescue tokens first) | founder | `nDiny7eQ7Qb1wU4UYupMHczZvToXbcWj8cTJyA5G3q6` | 0.2326 NEAR for 0.3 in |
+| Claim | ani | `EbPV7Wx2mtZhaMkMTsQoUYMY1PtcQGSZpRtdc1vom4Bf` | 1.0141 NEAR for 0.9 in (**+12.7%**) |
+| Claim | budi | `3bUbp2kc7p36JZ7YaHaiAkZvuQZzfcRgJq9zfATTchL3` | 0.6618 NEAR for 0.7 in (-5.5%) |
+| Claim | cici | `8YKVMiHyGFv93Ghd7vC2TMxzBQnUjYbkpZ82avsf5HW1` | 0.2804 NEAR for 0.3 in (-6.5%) |
+
+Claims paid 2.1890 NEAR, exactly the frozen reserve plus the fund (`verify-chain` checks this). Nobody raced anybody: every holder got the same price per token, plus a fund share by time held. The founder held only rescue tokens, bought at the higher rescue price, so got back the least per NEAR.
 
 Look any hash up on https://testnet.nearblocks.io.
 
