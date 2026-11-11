@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Checks every Ejecto coin on chain with no wallet and no keys, over public RPC only.
-// Usage: node scripts/verify-chain.mjs [factory-account]   (default factory.ejecto.testnet)
+// Usage: node scripts/verify-chain.mjs [factory-account]   (default fleet.ejecto.testnet, the live factory)
 // Optional: NEAR_RPC=<url> to use another RPC endpoint.
 //
 // For the factory and each coin it checks, from outside the contract:
@@ -8,15 +8,24 @@
 //   2. the coin's deployed code hash equals the code hash stored in the factory config,
 //      and that hash equals the reproducible build verified on NearBlocks
 //   3. before EJECT: reserve == R(supply), the exact integer curve formula (spec invariant 1)
-//   4. the account holds at least reserve + fund + protocol fees + storage (spec invariant 2)
+//   4. the account holds at least reserve + fund + protocol fees + held Mayday pledges + storage
+//      (spec invariants 2 and 7)
 //   5. after EJECT: claims never paid out more than the frozen reserve + fund (spec invariant 4)
 //   6. the fee preset readable in `status` matches the spec table
 // Exit code 0 when everything holds, 1 otherwise.
 
-const FACTORY = process.argv[2] ?? "factory.ejecto.testnet";
+const FACTORY = process.argv[2] ?? "fleet.ejecto.testnet";
 const RPC = process.env.NEAR_RPC ?? (FACTORY.endsWith(".near") ? "https://free.rpc.fastnear.com" : "https://test.rpc.fastnear.com");
-// sha256 of contracts/coin built with `cargo near build reproducible-wasm` at commit 7cedbe5 (verified on NearBlocks).
-const VERIFIED_COIN_HASH = "4069f17ff98bc10c1d9b8f06a56af04199eef50755efa0936c5b22d262e391ae";
+// sha256 of contracts/coin built with `cargo near build reproducible-wasm`, verified on NearBlocks, per factory.
+const VERIFIED = {
+  // coin code v3 at commit 31bfad3: Mayday with locked-time pledge weight (the live factory)
+  "fleet.ejecto.testnet": "b562658a418490b45e41eafca156ffe557d6a2fe70a4b33cd847fb05f1023d8a",
+  // coin code v2 at commit ef0d663: Mayday with the fund co-invest (archive, D-039)
+  "coins.ejecto.testnet": "e4092754696c5ea62382d0e69638d29887b9e03d44c67eefe3ec6bf3018e2e55",
+  // coin code v1 at commit 7cedbe5: no Mayday (archive)
+  "factory.ejecto.testnet": "4069f17ff98bc10c1d9b8f06a56af04199eef50755efa0936c5b22d262e391ae",
+};
+const VERIFIED_COIN_HASH = VERIFIED[FACTORY];
 
 // Curve constants (contracts/coin/src/curve.rs), all integers.
 const ONE = 10n ** 18n;
@@ -64,6 +73,7 @@ async function main() {
   const coins = await view(FACTORY, "get_coins", { from_index: 0, limit: 100 });
   console.log(`factory ${FACTORY}`);
   ok("factory stores the verified coin code", config.coin_code_hash === VERIFIED_COIN_HASH, config.coin_code_hash.slice(0, 12));
+  if (config.frozen !== undefined) console.log(`  info  frozen: ${config.frozen} (a frozen factory can never change the coin code)`);
   ok("factory lists every launched coin", coins.length === config.coins, `${coins.length} coins`);
 
   for (const c of coins) {
@@ -88,10 +98,11 @@ async function main() {
     const reserve = BigInt(status.reserve);
     const fund = BigInt(status.fund);
     const protocol = BigInt(status.protocol_fees);
+    const pledges = BigInt(status.pledges_held ?? 0); // coin code v1 has no Mayday
     const storage = BigInt(account.storage_usage) * STORAGE_YOCTO_PER_BYTE;
     ok(
-      "balance covers reserve + fund + protocol fees + storage",
-      BigInt(account.amount) >= reserve + fund + protocol + storage,
+      "balance covers reserve + fund + protocol fees + pledges + storage",
+      BigInt(account.amount) >= reserve + fund + protocol + pledges + storage,
       `${near(account.amount)} N held`,
     );
 
@@ -99,6 +110,7 @@ async function main() {
       const s = BigInt(status.supply);
       ok("reserve equals R(supply) exactly", reserve === reserveAt(s), `${near(reserve)} N for ${(Number(s) / 1e18).toFixed(0)} tokens`);
       console.log(`  info  flying: day ${status.day}, 14-day buys ${near(status.window_buys)} N, alive line ${near(status.alive_threshold)} N, ejectable ${status.ejectable}`);
+      if (status.rescues !== undefined) console.log(`  info  Mayday: ${status.mayday ? `round ${status.mayday.round} open` : "none open"}, rescues ${status.rescues}, pledges held ${near(pledges)} N`);
     } else {
       const e = status.ejected;
       const frozen = BigInt(e.reserve_e) + BigInt(e.fund_e);
