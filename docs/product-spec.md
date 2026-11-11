@@ -70,7 +70,7 @@ Fixed at the factory level (same for every coin of this factory version):
 | Supply cap | 10 billion tokens (reserve at the cap is about 25,000 NEAR) |
 | Minimum buy | 0.001 NEAR |
 
-Factory (v2, `coins.ejecto.testnet`): the owner uploads the coin code once with `set_coin_code`, then calls `freeze()`, after which `set_coin_code` fails forever and the factory account's own key is deleted. From then on nobody, the team included, can change the code that new coins get or the factory itself; `get_config` shows `frozen: true`. The first factory (`factory.ejecto.testnet`, coin code v1 without Mayday) stays on chain as an archive; its coins are immutable and keep working.
+Factory (`fleet.ejecto.testnet`, coin code v3): the owner uploads the coin code once with `set_coin_code`, then calls `freeze()`, after which `set_coin_code` fails forever and the factory account's own key is deleted. From then on nobody, the team included, can change the code that new coins get or the factory itself; `get_config` shows `frozen: true`. Two earlier factories stay on chain as archives, with immutable coins that keep working: `factory.ejecto.testnet` (coin code v1, no Mayday) and `coins.ejecto.testnet` (coin code v2, Mayday with the fund co-invest that v3 replaced).
 
 Initialization: `new` may only be called by the direct parent account (the factory, for example `factory.x` for `seato.factory.x`) or by the coin account itself (fallback deploy without a factory). Any other ancestor is rejected.
 
@@ -199,7 +199,9 @@ Edge cases:
 
 ## 10. Mayday: the crew can rescue a dying coin
 
-A dying coin does not have to end. When EJECT becomes possible, anyone can call a **Mayday** instead: a short, all-or-nothing crowd rescue, part-paid by the coin's own treasury. It is the coin's community ritual: the crew decides together whether the coin lives on.
+A dying coin does not have to end. When EJECT becomes possible, anyone can call a **Mayday** instead: a short, all-or-nothing crowd rescue. It is the coin's community ritual: the crew decides together whether the coin lives on. Rescuers are rewarded with loyalty, not with cash: a pledge is capital at risk, so it earns fund weight from the moment it is locked.
+
+Coin code v3 (factory `fleet.ejecto.testnet`). Code v2 (`coins.ejecto.testnet`, archived) had a fund co-invest instead of the locked-time weight; a review showed that a lone rescuer could pledge, collect and sell at once for a profit taken from the fund whenever the fund was large (D-039).
 
 All durations are in coin days (`day_length_sec`), so a demo coin runs a Mayday in seconds.
 
@@ -209,12 +211,12 @@ All durations are in coin days (`day_length_sec`), so a demo coin runs a Mayday 
 | Target | Set by the opener, from `alive_threshold` to `3 x alive_threshold` |
 | Opener's stake | The opener pledges at least 10% of the target in the opening call |
 | Duration | 3 days from opening (`deadline_ts`) |
-| Pledges | Escrowed NEAR, at least 0.001 NEAR each, from registered accounts. Locked until the Mayday ends. One open pledge per account: a pledge from an earlier round must be collected or withdrawn first. |
+| Pledges | Escrowed NEAR, at least 0.001 NEAR each, from registered accounts. Locked until the Mayday ends. One open pledge per account: a pledge from an earlier round must be collected or withdrawn first. A pledge that would pass the target is filled up to the target and the rest is sent back in the same call, so a rescue spends exactly the target. A gap of less than 0.001 NEAR left below the target counts as reached (it could never be filled). |
 | While open | EJECT is blocked. Buying and selling work as usual. |
 | Cooldown | After a failed Mayday, a new one can open only 7 days after its deadline. EJECT is possible again at once. |
-| Fund co-invest | On success the Ejecto Fund adds `min(25% of the pledges, 50% of the fund)` to the rescue buy |
+| Locked-time weight | On a rescue, each pledge earns the fund weight of the time it was locked: `scaled(amount) * (rescue time - pledge time)`, the same "capital at risk times time" rule as every holding. Early pledgers earn up to 3 days, an instant solo rescue earns nothing. Like all weight it pays only at EJECT and is shed pro-rata on a sell. A failed pledge earns no weight (it comes back in full). The fund spends nothing at the rescue. |
 
-**Success.** When the pledges reach the target (the pledge that crosses it executes the rescue), all pledged NEAR is spent as **one buy at one price**: the normal buy fees are taken from the pledges, the fund's co-invest is added to the net amount, and the curve mints the tokens. The rescue counts as a buy of the pledged amount for the alive detector, so the coin is alive again. The co-invest is the treasury's share of the rescue: every holder gains when the coin lives on, so the fund that belongs to all of them pays part of it.
+**Success.** When the pledges reach the target (the pledge that reaches it executes the rescue), the target is spent as **one buy at one price**: the normal buy fees are taken (fund fee and protocol fee, exactly as in `buy`), and the curve mints the tokens. The rescue counts as a buy of the target for the alive detector, so the coin is alive again. The locked-time weight is booked at the same moment: the escrow gets `bonus = sum over the pledges of scaled(amount) * (t_rescue - t_pledge)`, and the global weight `W` grows by the same amount. The contract keeps two running sums per holder and per round (`sc = sum scaled(amount)` and `tw = sum scaled(amount) * t_pledge`), so `bonus = sc * t_rescue - tw` needs no loop. If the coin dies later, the rescuers own a larger slice of the fund, but only if they are still aboard.
 
 The tokens go to an **escrow** inside the coin (the coin account holds them, they count in the supply). Each pledger takes their share with `collect()`, or automatically on their next buy, sell, transfer, Mayday action or claim:
 
@@ -222,9 +224,10 @@ The tokens go to an **escrow** inside the coin (the coin account holds them, the
 tokens = round.tokens_left * pledge / round.pledges_left      (the last pledger takes the rest)
 basis  = pledge                                               (only the pledger's own NEAR is basis)
 weight = scaled(pledge) * (min(now, t_e) - round.ts)          (the weight that pledge earned since the rescue)
+       + pledge_sc * round.ts - pledge_tw                       (the weight its pledges earned while locked; the last pledger takes the rest)
 ```
 
-The escrow is booked as one holder (the coin account) whose basis is the sum of the uncollected pledges, so it earns weight exactly like any holder, and `collect` moves the slice of tokens, basis and weight to the pledger. The sum of holder weights stays equal to `W`, and there is no loop over pledgers. After EJECT, `collect` still works (weights frozen at `t_e`) and `claim` collects first.
+The escrow is booked as one holder (the coin account) whose basis is the sum of the uncollected pledges, so it earns weight exactly like any holder, and `collect` moves the slice of tokens, basis and weight to the pledger. The sum of holder weights stays equal to `W`, and there is no loop over pledgers. After EJECT, `collect` still works (weights frozen at `t_e`) and `claim` collects first. `collect` succeeds even when a dust pledge rounds to 0 tokens (the pledge is cleared), and `withdraw_pledge` on a rescued round collects instead of failing. A round is deleted once every pledge in it is collected or withdrawn, so its storage is released.
 
 **Failure.** If the deadline passes below the target, the next call that touches the Mayday closes it as failed. Every pledger withdraws their full pledge with `withdraw_pledge()`. Nobody loses money by trying to save the coin: it is an assurance contract.
 
@@ -235,16 +238,19 @@ The escrow is booked as one holder (the coin account) whose basis is the sum of 
 | Open Maydays only to delay EJECT | At most 3 days per attempt, then 7 days in which anyone can EJECT, and the opener locks 10% of the target meanwhile |
 | A target that can never be met | Capped at 3 x the alive line |
 | Front-run the rescue | All pledges fill at one batch price |
-| Rescue and dump (pledge to collect the co-invest, then sell at once) | Loses money: the buy fees, the sell fee and the price impact cost more than the co-invest gives (in the model the attacker loses 11.7 of every 20 NEAR pledged) |
-| Drain the fund through rescues | Co-invest is at most 25% of the pledges and at most half of the fund, once per rescue |
+| Rescue and dump (pledge, collect, sell at once) | Loses money: the rescue is an ordinary buy at the batch price, so a dump pays the buy and sell fees, and the sell sheds the locked-time weight with the rest of the weight. Unit test with a 7 NEAR fund; in the model the attacker loses 11.4 of every 20 NEAR pledged. |
+| Drain the fund through rescues | Not possible: the fund spends nothing at a rescue. Pledges only earn weight for the time their NEAR was really locked, paid at EJECT to holders still aboard. A solo rescue in one call earns no extra weight. |
+| Overshoot the target (one huge pledge to inflate the peak) | The pledge is filled only up to the target and the rest is returned, so the rescue and the detector record at most 3 x the alive line |
+| Sandwich the rescue (buy just before sending the pledge that completes the target, sell after) | Residual risk, documented: the trigger gains only from the pledgers' own price impact and pays about 4% in round-trip fees, the same as front-running any large buy. The target cap bounds the impact. |
+| Fill the coin's storage with Mayday rounds | Each round needs an opener stake of 10% of the target, a failed round can repeat only every 10 days, and rounds are deleted once settled |
 | Send tokens to the coin account to mix with the escrow | `ft_transfer` and `ft_transfer_call` to the coin account itself are refused |
 | Unregister storage and lose an open pledge | `storage_unregister` is refused while the account has a pledge or uncollected rescue tokens |
 
 What it does not do: it cannot undo peak inflation griefing, because a fake peak raises the alive line and therefore the minimum target too.
 
-Views: `status` adds `mayday` (the open round: `round`, `opener`, `target`, `pledged`, `opened_ts`, `deadline_ts`), `mayday_open_after_ts` (end of a cooldown, in seconds, 0 when none), `rescues`, `pledges_held` (NEAR held for open or failed pledges) and `can_mayday`. `holder` adds `pledge`, `pledge_round`, `pledge_state` (`open`, `rescued`, `failed` or none) and `collectable` (tokens waiting in escrow).
+Views: `status` adds `mayday` (the open round: `round`, `opener`, `target`, `pledged`, `opened_ts`, `deadline_ts`), `mayday_open_after_ts` (end of the last cooldown in seconds, 0 when there was none; for a Mayday past its deadline but not closed yet, the cooldown it will start), `rescues`, `pledges_held` (NEAR held for open or failed pledges) and `can_mayday`. `mayday(target)` returns the open round, or nothing when the opener's own stake reached the target and the rescue already ran. `holder` adds `pledge`, `pledge_round`, `pledge_state` (`open`, `rescued`, `failed` or none) and `collectable` (tokens waiting in escrow).
 
-Events (NEP-297, standard `ejecto`): `ejecto_mayday_open`, `ejecto_pledge`, `ejecto_rescue`, `ejecto_mayday_fail`, `ejecto_collect`, `ejecto_pledge_withdraw`.
+Events (NEP-297, standard `ejecto`, version 1.2.0): `ejecto_mayday_open`, `ejecto_pledge` (with `refunded`, the part above the target sent back), `ejecto_rescue` (`round`, `pledged`, `tokens`, `bonus_weight` = the locked-time weight, `price_after`), `ejecto_mayday_fail`, `ejecto_collect`, `ejecto_pledge_withdraw`.
 
 ## 11. Invariants (must hold, test them)
 
@@ -255,7 +261,7 @@ Events (NEP-297, standard `ejecto`): `ejecto_mayday_open`, `ejecto_pledge`, `eje
 5. No method can change parameters after launch. The coin account has no access keys.
 6. After EJECT, no buy, sell or transfer succeeds.
 7. Contract NEAR balance >= `reserve + fund + protocol_fees + open and unwithdrawn pledges + storage`.
-8. The rescue escrow holds exactly the tokens that uncollected pledgers can still collect, and its basis equals their uncollected pledges. When every pledger of a round has collected, the round is empty.
+8. The rescue escrow holds exactly the tokens that uncollected pledgers can still collect, and its basis equals their uncollected pledges. When every pledger of a round has collected (or, after a failure, withdrawn), the round is deleted.
 9. A failed Mayday returns every pledge in full; a successful one turns every pledge into tokens. No pledge is ever both refunded and filled.
 
 ## 12. Out of scope for the hackathon MVP
