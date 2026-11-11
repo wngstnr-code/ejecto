@@ -29,6 +29,8 @@ export type LogEntry = {
   round?: number;
   /** mayday: the target. pledge: the round's total after this pledge. */
   extra?: number;
+  /** pledge: the part above the target that was sent straight back. */
+  back?: number;
   account: string;
   /** buy: NEAR paid in. sell: NEAR received. eject: reserve frozen. claim: total paid out. */
   near: number;
@@ -126,9 +128,9 @@ async function chainEvents(row: TxRow, signal?: AbortSignal): Promise<ChainEvent
           } else if (ev.event === "ejecto_mayday_open") {
             events.push({ kind: "mayday", round: Number(d.round), account: d.opener, near: 0, fund: 0, reserve: 0, tokens: 0, extra: y(d.target) });
           } else if (ev.event === "ejecto_pledge") {
-            events.push({ kind: "pledge", round: Number(d.round), account: d.account_id, near: y(d.amount), fund: 0, reserve: 0, tokens: 0, extra: y(d.pledged) });
+            events.push({ kind: "pledge", round: Number(d.round), account: d.account_id, near: y(d.amount), fund: 0, reserve: 0, tokens: 0, extra: y(d.pledged), back: d.refunded ? y(d.refunded) : 0 });
           } else if (ev.event === "ejecto_rescue") {
-            events.push({ kind: "rescue", round: Number(d.round), account: row.signer_account_id, near: y(d.pledged), fund: y(d.coinvest), reserve: 0, tokens: unitsToTokens(d.tokens) });
+            events.push({ kind: "rescue", round: Number(d.round), account: row.signer_account_id, near: y(d.pledged), fund: 0, reserve: 0, tokens: unitsToTokens(d.tokens) });
           } else if (ev.event === "ejecto_mayday_fail") {
             events.push({ kind: "fail", round: Number(d.round), account: row.signer_account_id, near: y(d.pledged), fund: 0, reserve: 0, tokens: 0, extra: y(d.target) });
           } else if (ev.event === "ejecto_collect") {

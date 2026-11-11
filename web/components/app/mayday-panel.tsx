@@ -12,8 +12,6 @@ import { Amount } from "./ui";
 const BPS = 10_000n;
 /** Contract constants (coin lib.rs, spec section 10). */
 const OPENER_BPS = 1_000n;
-const COINVEST_BPS = 2_500n;
-const COINVEST_FUND_MAX_BPS = 5_000n;
 const MAYDAY_DAYS = 3;
 const MIN_PLEDGE = 10n ** 21n; // 0.001 NEAR
 
@@ -22,17 +20,6 @@ function blockedBy(holder: HolderView | null, round: number | null) {
   if (!holder || holder.pledge_state !== "failed" || BigInt(holder.pledge) === 0n) return null;
   if (round !== null && holder.pledge_round === round) return null;
   return `Withdraw your pledge from Mayday ${holder.pledge_round} first (the card below).`;
-}
-
-/**
- * What the fund adds at a rescue of `pledged`, as the contract computes it: the rescue's own fund fee
- * lands first, then the co-invest is 25% of the pledges, at most half the fund.
- */
-function coinvest(pledged: bigint, s: CoinStatus) {
-  const fee = (pledged * BigInt(s.fund_buy_bps) + BPS - 1n) / BPS;
-  const a = (pledged * COINVEST_BPS) / BPS;
-  const b = ((BigInt(s.fund) + fee) * COINVEST_FUND_MAX_BPS) / BPS;
-  return a < b ? a : b;
 }
 
 /** Shown instead of the Call panel while a failed Mayday's cooldown runs. */
@@ -147,7 +134,8 @@ export function MaydayCallPanel({ coinId, status, holder, onDone }: { coinId: st
       <h3 className="display mt-3 text-3xl leading-none sm:text-4xl">Call a Mayday</h3>
       <p className="label mt-4 leading-relaxed text-muted">
         Rally the crew to buy the coin back to life together. EJECT waits {duration} while the crew pledges. Reach the target and every
-        pledge buys in at one price, with the Ejecto Fund adding up to 25%. Miss it and every pledge comes back in full.
+        pledge buys in at one price. A pledge is capital at risk, so it earns loyalty in the Ejecto Fund from the moment it is locked.
+        Miss it and every pledge comes back in full.
       </p>
 
       <div className="label mt-6 text-muted">Rescue target</div>
@@ -182,10 +170,8 @@ export function MaydayCallPanel({ coinId, status, holder, onDone }: { coinId: st
       </div>
       <dl className="label mt-4 space-y-2">
         <div className="flex justify-between">
-          <dt className="text-muted">Fund adds at the rescue</dt>
-          <dd className="text-hazard">
-            <Amount icon="text-muted">{formatNear(yoctoToNear(coinvest(target, status)), 4)}</Amount>
-          </dd>
+          <dt className="text-muted">While locked</dt>
+          <dd className="text-hazard">Earns loyalty</dd>
         </div>
         <div className="flex justify-between">
           <dt className="text-muted">If it fails</dt>
@@ -291,7 +277,7 @@ export function MaydayOpenPanel({
       <div className="label mt-2 flex justify-between text-muted">
         <span>{pct.toFixed(0)}%</span>
         <span>
-          Fund adds <span className="text-hazard">{formatNear(yoctoToNear(coinvest(pledged > target ? pledged : target, status)), 4)}</span>
+          Pledges earn <span className="text-hazard">loyalty while locked</span>
         </span>
       </div>
 
@@ -343,7 +329,10 @@ export function MaydayOpenPanel({
           >
             {busy ? "Pledging..." : accountId ? (amount >= missing && amount > 0n ? "Pledge and rescue" : "Pledge") : "Connect to pledge"}
           </button>
-          <p className="label mt-3 leading-relaxed text-muted">Pledges are locked until the Mayday ends. If the target is missed, every pledge comes back in full.</p>
+          <p className="label mt-3 leading-relaxed text-muted">
+            Pledges are locked until the Mayday ends. Anything above the target comes straight back. If the target is missed, every pledge
+            comes back in full.
+          </p>
         </>
       )}
       <TxNote tx={tx} />

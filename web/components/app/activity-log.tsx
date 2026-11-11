@@ -102,8 +102,9 @@ function Detail({ e }: { e: LogEntry }) {
   if (e.kind === "sell") return <>{`${formatCompact(e.tokens)} tokens, +${formatNear(e.fund, 4)} to the fund`}</>;
   if (e.kind === "eject") return <>{`Trading stopped. Reserve and ${formatNear(e.fund, 4)} fund frozen`}</>;
   if (e.kind === "mayday") return <>{`Mayday ${e.round}: rescue target ${formatNear(e.extra ?? 0, 2)} NEAR, EJECT on hold`}</>;
-  if (e.kind === "pledge") return <>{`Pledged to Mayday ${e.round}: ${formatNear(e.extra ?? 0, 3)} NEAR so far`}</>;
-  if (e.kind === "rescue") return <>{`The crew bought ${formatCompact(e.tokens)} tokens at one price, the fund added ${formatNear(e.fund, 4)}`}</>;
+  if (e.kind === "pledge")
+    return <>{`Pledged to Mayday ${e.round}: ${formatNear(e.extra ?? 0, 3)} NEAR so far${e.back ? `, ${formatNear(e.back, 4)} above the target sent back` : ""}`}</>;
+  if (e.kind === "rescue") return <>{`The crew bought ${formatCompact(e.tokens)} tokens at one price; pledges keep the loyalty they earned while locked`}</>;
   if (e.kind === "fail") return <>{`Mayday ${e.round} missed its target. Every pledge comes back in full`}</>;
   if (e.kind === "collect") return <>{`${formatCompact(e.tokens)} rescue tokens for a ${formatNear(e.near, 3)} pledge`}</>;
   if (e.kind === "refund") return <>{`Pledge returned in full from Mayday ${e.round}`}</>;
