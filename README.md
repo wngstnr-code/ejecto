@@ -1,8 +1,10 @@
 # Ejecto
 
-[![CI](https://github.com/wngstnr-code/ejecto/actions/workflows/ci.yml/badge.svg)](https://github.com/wngstnr-code/ejecto/actions/workflows/ci.yml) [![chain check](https://github.com/wngstnr-code/ejecto/actions/workflows/chain.yml/badge.svg)](https://github.com/wngstnr-code/ejecto/actions/workflows/chain.yml) ![tests](https://img.shields.io/badge/tests-71%20coin%20%C2%B7%2015%20factory%20%C2%B7%203%20sandbox-2ea44f) ![source](https://img.shields.io/badge/source-verified%20on%20NearBlocks-2ea44f) ![license](https://img.shields.io/badge/license-MIT-blue)
+[![CI](https://github.com/wngstnr-code/ejecto/actions/workflows/ci.yml/badge.svg)](https://github.com/wngstnr-code/ejecto/actions/workflows/ci.yml) [![chain check](https://github.com/wngstnr-code/ejecto/actions/workflows/chain.yml/badge.svg)](https://github.com/wngstnr-code/ejecto/actions/workflows/chain.yml) ![tests](https://img.shields.io/badge/tests-100%20coin%20%C2%B7%2018%20factory%20%C2%B7%205%20sandbox-2ea44f) ![source](https://img.shields.io/badge/source-verified%20on%20NearBlocks-2ea44f) ![license](https://img.shields.io/badge/license-MIT-blue)
 
 **Every memecoin needs an ejecto seato.**
+
+> **TL;DR.** Memecoins die, and when they do the holders race for the exit and the last ones out lose everything. On Ejecto the meme does something about it: every coin carries a fund that its trades fill, a death rule written in its keyless contract, and an ejection seat anyone can pull. When the coin dies, the whole crew exits together at one fair split and the fund pays the most loyal. If the crew still believes, it can call a **Mayday** and buy the coin back to life together, and nobody loses a cent if the rescue fails. In the model, the race losers go from **24.8% wiped out to 0%**. [Judge it in 60 seconds](#judge-it-in-60-seconds), or check everything without a wallet with `node scripts/verify-chain.mjs`.
 
 Ejecto is a memecoin launchpad on NEAR where every coin has an ejection seat. Each coin trades on a bonding curve inside its own keyless contract, and a small part of every trade goes into the **Ejecto Fund**. When the coin dies, anyone can press **EJECT**: trading stops forever and every holder claims a fair share of the reserve plus a loyalty share of the fund. No exit race, no total wipeout, no admin.
 
@@ -10,10 +12,11 @@ Ejecto is a memecoin launchpad on NEAR where every coin has an ejection seat. Ea
 |---|---|
 | Live app (NEAR testnet) | https://ejecto.vercel.app |
 | Demo video | https://x.com/Dudung_gg/status/2120172645438374353 |
-| Factory contract (source verified) | [`factory.ejecto.testnet`](https://testnet.nearblocks.io/address/factory.ejecto.testnet/contract/code) |
-| Example coin, launched, ejected and claimed on video | [`pilot.factory.ejecto.testnet`](https://testnet.nearblocks.io/address/pilot.factory.ejecto.testnet) |
+| Factory contract (source verified) | [`fleet.ejecto.testnet`](https://testnet.nearblocks.io/address/fleet.ejecto.testnet/contract/code) |
+| A coin rescued by its crew (one failed Mayday, one rescue) | [`phoenix.fleet.ejecto.testnet`](https://ejecto.vercel.app/coin/?id=phoenix.fleet.ejecto.testnet) |
+| Mechanism note, every claim mapped to its test | [`docs/mechanism.md`](docs/mechanism.md) |
 | Track | Memecoins With Mechanics |
-| Judge it in 60 seconds | Three coins are parked ready to EJECT: [buy, eject, claim](#judge-it-in-60-seconds) with your own testnet wallet |
+| Judge it in 60 seconds | Seven Jury Seats, one per judge, are parked ready to EJECT: [buy, eject, claim, or call a Mayday](#judge-it-in-60-seconds) with your own testnet wallet |
 
 Built at NEAR HACKATHON 2026.
 
@@ -34,7 +37,8 @@ All of it lives in the coin contract (`contracts/coin`). There is no backend.
 5. **Claim.** Each holder calls `claim()` and receives:
    - a **reserve share**, pro-rata to their token balance (nobody races to the exit), plus
    - a **fund share**, weighted by **net NEAR at risk multiplied by time held** (loyalty, not size, is rewarded; transfers move basis, not weight).
-6. **Keyless and fixed.** The factory creates each coin as `<symbol>.factory.ejecto.testnet` with **no access keys** and the contract has **no owner methods**. Every parameter is locked at launch.
+6. **Mayday.** A dying coin does not have to end. Anyone can call a Mayday instead of EJECT: for 3 days the crew pledges NEAR toward a target (1x to 3x the alive line). If the target is reached, all pledges buy in together at **one price** and the coin is alive again. If not, **every pledge comes back in full**. The fund spends nothing; a pledge is capital at risk, so it earns loyalty weight for the time it was locked, exactly like holding.
+7. **Keyless and fixed.** The factory creates each coin as `<symbol>.fleet.ejecto.testnet` with **no access keys** and the contract has **no owner methods**. Every parameter is locked at launch. Before the submission deadline the factory is frozen and its key deleted, so nobody can change the code of future coins either.
 
 Late buyers can still lose some money: early buyers got more tokens per NEAR, so the pro-rata split favors them. What Ejecto removes is the exit race and total wipeouts, and it pays loyalty. The people it protects most are the ones who would lose the race: in the model, 24.8% of the last quarter of holders to sell are wiped out in an exit race, and none with Ejecto ([Simulation](#simulation)).
 
@@ -49,15 +53,15 @@ Late buyers can still lose some money: early buyers got more tokens per NEAR, so
 
 ## For judges
 
-The fastest way to see the mechanic is [Judge it in 60 seconds](#judge-it-in-60-seconds): three coins are parked ready to EJECT, so you can buy, eject and claim with your own wallet. The fastest way to check the claims below without a wallet is `node scripts/verify-chain.mjs`.
+The fastest way to see the mechanic is [Judge it in 60 seconds](#judge-it-in-60-seconds): seven coins are parked ready to EJECT, so you can buy, eject and claim (or rescue) with your own wallet. Every claim below is mapped to the test that proves it in [`docs/mechanism.md`](docs/mechanism.md). The fastest way to check the claims below without a wallet is `node scripts/verify-chain.mjs`.
 
 | Criterion | Where it is answered |
 |---|---|
-| Technical implementation | All of the mechanic is in the coin contract: bonding curve [`curve.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/curve.rs), loyalty weights (net NEAR at risk times time) [`accounting.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/accounting.rs), the 14-day alive detector [`detector.rs`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/detector.rs), and [`eject`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/lib.rs#L376) / [`claim`](https://github.com/wngstnr-code/ejecto/blob/7cedbe5/contracts/coin/src/lib.rs#L409) in `lib.rs`. 71 coin unit tests, 15 factory unit tests and 3 sandbox tests with the real wasm ([Run it locally](#run-it-locally)). Reproducible build, source verified on NearBlocks. `node scripts/verify-chain.mjs` re-checks the live deployment with no keys. |
-| Design | A static app with five pages (landing, Coins, Coin, Launch, My seats), phone ready. The coin page shows the engine (14-day buys against the alive line), the price history rebuilt from chain, the curve, the eject record, the **Crew** board (holders ranked by loyalty) and an on-chain log of every action. Holders can share their seat or their parachute on X. |
+| Technical implementation | All of the mechanic is in the coin contract: bonding curve [`curve.rs`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/curve.rs), loyalty weights (net NEAR at risk times time) [`accounting.rs`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/accounting.rs), the 14-day alive detector [`detector.rs`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/detector.rs), [`eject`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/lib.rs#L454) / [`claim`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/lib.rs#L492), and the Mayday rescue [`mayday`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/lib.rs#L555) / [`rescue`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/lib.rs#L877) / [`settle`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/lib.rs#L963) (an escrow with no loop over pledgers) in `lib.rs`. 100 coin unit tests (including 600 random steps that check every invariant), 18 factory unit tests and 5 sandbox tests with the real wasm ([Run it locally](#run-it-locally)). Reproducible build, source verified on NearBlocks. `node scripts/verify-chain.mjs` re-checks the live deployment with no keys. |
+| Design | A static app with five pages (landing, Coins, Coin, Launch, My seats), phone ready. The coin page shows the engine (14-day buys against the alive line), the price history rebuilt from chain, the curve, the Mayday panels (call, pledge with a live countdown, collect or withdraw), the eject record, the **Crew** board (holders ranked by loyalty, a **Longest seat** high score, rescuer badges) and an on-chain log of every action. Holders can share their seat or their parachute on X. |
 | Impact | The loyal holders are the ones who lose the most when a memecoin dies. In the 500-coin simulation, the last quarter of holders to sell in an exit race get **0.46 NEAR back per NEAR and 24.8% of them are wiped out**; with Ejecto the same people get **0.55 back and none are wiped out**. Across all traders the share wiped out goes from 4.37% to 0% and losses per coin fall 10.8% ([Simulation](#simulation)). The recorded testnet run shows the same on real transactions ([The demo run, on chain](#the-demo-run-on-chain)). |
-| Originality | The ending is the feature: one EJECT moment where everybody exits together, plus a fund that pays loyalty. See [How Ejecto differs](#how-ejecto-differs). |
-| Sustainability | Coins have no access keys and no owner methods, every parameter is set once in `new`, anyone can call `eject`, and there is no backend to switch off. The one remaining owner is the factory's, for future launches only ([Security model](#security-model-and-known-limits)). |
+| Originality | The ending is the feature: one EJECT moment where everybody exits together, a fund that pays loyalty, and a Mayday ritual where the crew decides together whether the coin lives on. See [How Ejecto differs](#how-ejecto-differs). |
+| Sustainability | Coins have no access keys and no owner methods, every parameter is set once in `new`, anyone can call `eject` or `mayday`, and there is no backend to switch off. Before the submission deadline the factory is frozen and its key deleted, so not even the team can change the code of future coins ([Security model](#security-model-and-known-limits)). |
 
 ### Against the track prompt
 
@@ -66,30 +70,33 @@ The fastest way to see the mechanic is [Judge it in 60 seconds](#judge-it-in-60-
 | An NEP-141 token with the mechanic in the contract, not in a backend somebody could switch off | Yes. Curve, fund, alive detector, EJECT and claim are all in the coin contract. The web app is a static site; nothing calls the contract on a timer, and `eject` can be called by anyone. |
 | All parameters set at launch and readable by anyone, no admin key | Set once by the factory's `create_coin` and the coin's `new`, readable with the `status` view. The coin account has 0 access keys and no setter methods. |
 | Sybil resistance good enough for a demo, with its limits written plainly | [Sybil resistance and its limits](#sybil-resistance-and-its-limits), each claim backed by a named test. |
-| A page with the current state and a log | The coin page: live engine, price, reserve and fund, the **Crew** board ranking every holder by loyalty like a high score, and the **On-chain log** of every buy, sell, EJECT and claim with links to the transactions. |
-| Simulate 60 days first | [`sim/ejecto-sim.mjs`](sim/ejecto-sim.mjs): 500 coins, 400 traders each, 60 days, with and without Ejecto, plus whale and wash-trading attacks and three fee presets. Written before the contract. |
+| A page with the current state and a log | The coin page: live engine, price, reserve and fund, the **Crew** board ranking every holder by loyalty with a **Longest seat** high score, and the **On-chain log** of every buy, sell, Mayday step, EJECT and claim with links to the transactions. |
+| A community ritual | **Mayday**: the crew pledges together for 3 days; all-or-nothing, one price, a full refund on failure. Each step is an event in the log. |
+| Simulate 60 days first | [`sim/ejecto-sim.mjs`](sim/ejecto-sim.mjs): 500 coins, 400 traders each, 60 days, with and without Ejecto, plus whale and wash-trading attacks and three fee presets. Written before the contract, and the Mayday was simulated before it was built ([`sim/mayday-experiment.mjs`](sim/mayday-experiment.mjs)). |
 
 ## Judge it in 60 seconds
 
-Three coins are parked for judges in demo time (1 day = 10 s): they are older than 14 days and their buys sit under the alive line, so each one is **ready to EJECT**. A small crew (ani, budi, cici) already holds a seat. You need a NEAR testnet wallet with about 0.2 NEAR.
+Seven **Jury Seats**, one per judge and each with its own logo, are parked in demo time (1 day = 10 s): they are older than 14 days and their buys sit under the alive line, so each one is **ready to EJECT**. A small crew (ani, budi, cici) already holds a seat. You need a NEAR testnet wallet with about 0.2 NEAR.
 
 | # | Do | See |
 |---|---|---|
-| 1 | Open [Jury Seat 1](https://ejecto.vercel.app/coin/?id=jury1.factory.ejecto.testnet). If someone already ejected it, use [Jury Seat 2](https://ejecto.vercel.app/coin/?id=jury2.factory.ejecto.testnet) or [Jury Seat 3](https://ejecto.vercel.app/coin/?id=jury3.factory.ejecto.testnet). | The badge says **Ejectable** and the **Pull the handle** panel is open. The Crew board lists ani, budi and cici. |
+| 1 | Open a Jury Seat: [1](https://ejecto.vercel.app/coin/?id=jury1.fleet.ejecto.testnet) · [2](https://ejecto.vercel.app/coin/?id=jury2.fleet.ejecto.testnet) · [3](https://ejecto.vercel.app/coin/?id=jury3.fleet.ejecto.testnet) · [4](https://ejecto.vercel.app/coin/?id=jury4.fleet.ejecto.testnet) · [5](https://ejecto.vercel.app/coin/?id=jury5.fleet.ejecto.testnet) · [6](https://ejecto.vercel.app/coin/?id=jury6.fleet.ejecto.testnet) · [7](https://ejecto.vercel.app/coin/?id=jury7.fleet.ejecto.testnet). Pick one whose badge still says **Ejectable** (the [Coins](https://ejecto.vercel.app/coins/) table shows them all). | The badge says **Ejectable**; the **Pull the handle** and **Call a Mayday** panels are open. The Crew board lists ani, budi and cici. |
 | 2 | Connect a testnet wallet and **buy 0.1 NEAR** (the buy panel stays open under the handle). | You join the crew. 0.1 NEAR keeps the 14-day buys under the 1 NEAR alive line, so the coin stays ejectable. |
 | 3 | Press **EJECT**. | The seat fires. Trading is closed for good; the eject record shows the frozen reserve and fund. |
 | 4 | Press **Claim** in **Your parachute**. | Your share of the reserve plus your share of the fund comes back in one transaction. You bought last, so you get back a little less than you paid and almost no fund: the late-whale result in miniature. The crew can claim theirs any time; nobody had to race you. |
 
-Every step shows up in the **On-chain log** with a link to the transaction. If all three are ejected, launch your own coin below; it is ready to eject 140 s after launch.
+**Or rescue it instead.** At step 3, pick target **1x line** under **Call a Mayday** and press **Call Mayday** (it pledges the 10% opener stake). The badge turns **Mayday**, EJECT waits 30 s, and a countdown runs. Pledge the rest with **Fill the rest**: the pledges buy in at one price, the coin is alive again and you get the **Rescuer** badge. Or let the time run out: **Withdraw pledge** returns every yoctoNEAR.
+
+Every step shows up in the **On-chain log** with a link to the transaction. If all seven are ejected, launch your own coin below; it is ready to eject 140 s after launch.
 
 ## Try it in 5 minutes (hosted app, NEAR testnet)
 
-You need a NEAR **testnet** wallet with about 3 NEAR (launch costs 2.67 NEAR). The wallet modal (NEAR Connect) lists Meteor, Intear, Ledger, Nightly, NEAR CLI and more.
+You need a NEAR **testnet** wallet with about 3.2 NEAR (launch costs 2.95 NEAR). The wallet modal (NEAR Connect) lists Meteor, Intear, Ledger, Nightly, NEAR CLI and more.
 
 | # | Do | See |
 |---|---|---|
-| 1 | Open https://ejecto.vercel.app/coins/ | A live table of every coin from the factory, with status badges. `Pilot ($PILOT)` and `Seato ($SEAT)` are **Ejected**. |
-| 2 | Click **Pilot** | The coin page: price, supply, reserve, Ejecto Fund, the engine meter showing **Engine off**, the price history rebuilt from chain, the eject record, the **Crew** board (the whale ranks last with 3.3% loyalty against 19% to 41% for the early holders), and the **On-chain log**: launch buys, the whale, EJECT and four claims, each linked to its transaction. |
+| 1 | Open https://ejecto.vercel.app/coins/ | A live table of every coin from the factory, with status badges and a small engine bar. |
+| 2 | Click **Phoenix** | The coin page: price, supply, reserve, Ejecto Fund, the engine meter, the price history (the rescue is the big step), the **Crew** board with three **Rescuer** badges and the **Longest seat** high score, and the **On-chain log**: the crew's buys, Mayday 1 (one pledge, **Failed**, a full **Refund**), then Mayday 2 (pledges, part of one sent back above the target, **Rescue**, three **Collects**), each linked to its transaction. |
 | 3 | Click **Connect wallet** (top right) and pick a testnet wallet | Your account in the header. |
 | 4 | Go to **Launch**. Enter a name and a free symbol, keep **Demo time** (1 day = 10 s) and press **Launch** | "Coin is live" with **0 access keys** and a link to the explorer. |
 | 5 | Click **Open the coin**, enter `0.2` NEAR and press **Buy** | The price history and the bonding curve move; **Your seat** shows your balance, net basis and fund weight. |
@@ -107,36 +114,52 @@ One command, Node 22+ only (no dependencies, no keys, public RPC):
 node scripts/verify-chain.mjs
 # see, for the factory and for every coin it launched:
 #   ok    0 access keys
-#   ok    deployed code is the verified code  (4069f17ff98b)
+#   ok    deployed code is the verified code  (b562658a4184)
 #   ok    reserve equals R(supply) exactly            (coins still trading)
 #   ok    claims paid out no more than the frozen reserve + fund   (ejected coins)
 #   ...
 # All checks passed.
 ```
 
-It checks spec invariants 1, 2, 4 and 5 from outside the contract: no keys, the verified code hash, the reserve on the exact integer curve, the balance covering reserve, fund, protocol fees and storage, and claims within the frozen pot. The [chain check](.github/workflows/chain.yml) workflow runs it against testnet every 6 hours.
+It checks spec invariants 1, 2, 4, 5 and 7 from outside the contract: no keys, the verified code hash, the reserve on the exact integer curve, the balance covering reserve, fund, protocol fees, held Mayday pledges and storage, and claims within the frozen pot. `node scripts/verify-chain.mjs coins.ejecto.testnet` and `... factory.ejecto.testnet` check the two archived factories the same way. The [chain check](.github/workflows/chain.yml) workflow runs it against testnet every 6 hours.
 
 Or check single facts with [near-cli-rs](https://github.com/near/near-cli-rs):
 
 ```bash
 # the coin account has no access keys
-near account list-keys pilot.factory.ejecto.testnet network-config testnet now
+near account list-keys phoenix.fleet.ejecto.testnet network-config testnet now
 # see: an empty table (no public keys at all)
 
-# the frozen eject snapshot and all parameters
-near contract call-function as-read-only pilot.factory.ejecto.testnet status json-args '{}' network-config testnet now
-# see: "ejected": { "t_e": ..., "reserve_e": ..., "fund_e": ... } and "ejectable": false
+# all parameters, the engine and the Mayday state
+near contract call-function as-read-only phoenix.fleet.ejecto.testnet status json-args '{}' network-config testnet now
+# see: "rescues": 1, "mayday": null, "pledges_held": "0"
 
 # the factory stores the verified coin code
-near contract call-function as-read-only factory.ejecto.testnet get_config json-args '{}' network-config testnet now
-# see: "coin_code_hash": "4069f17ff98bc10c1d9b8f06a56af04199eef50755efa0936c5b22d262e391ae"
+near contract call-function as-read-only fleet.ejecto.testnet get_config json-args '{}' network-config testnet now
+# see: "coin_code_hash": "b562658a418490b45e41eafca156ffe557d6a2fe70a4b33cd847fb05f1023d8a"
+#      and, once frozen before the deadline, "frozen": true
 ```
 
 The contract tab on NearBlocks shows **Contract Source Code Verified** for the factory and for every coin.
 
+### The Mayday run, on chain
+
+Coin `$PHOENIX` on the live factory, demo time 10 s per day.
+
+| Step | Account | Transaction | Result |
+|---|---|---|---|
+| Launch, demo time | founder.ejecto.testnet | `6J9vavT92pQekH1Bi98g5sXLme1RXsdMXJQzCo4EPY8v` | keyless coin, code `b562658a` |
+| Crew buys 0.3, 0.2 and 0.1 NEAR | ani, budi, cici | `3SGvL3jYt46xW4Sqv87vJdVdH3EboXxMKZM9xgkdfaGP`, `34pQLTLrD6viDqfgbuTD9oLPXXd3U4aEFqhQeo9RXne2`, `2QobBFoo3kDfGYDj3iDHVnnKY2wkiaxsF52YLGRhcSxW` | under the 1 NEAR alive line, so the coin dies on day 14 |
+| Mayday 1: target 2 NEAR, opener stakes 0.2 | budi | `4wqfVmeZYAwrhbyAi4YF88JjtZnQEmMnkgUjRwFqnJQX` | EJECT waits 30 s |
+| Mayday 1 missed its target: pledge back in full | budi | `JBezHwro29iokgoWRJcjteeekgGy4buFxvhzvpGoYm64` | **0.2 NEAR returned**, 7-day cooldown |
+| Mayday 2: target 1 NEAR, opener stakes 0.3 | ani | `8P8Nxknq4gtgmd3ZccVeMTd7FXQxEJGhjLMx5E4x2fCD` | |
+| Pledge 0.4 | budi | `6pkdzhy9BULQbLbvtmq77bVULZRdXtnhPb8fhan98xp6` | |
+| Pledge 0.4: 0.3 fills the target | cici | `77nyUsxcyJyF6gQhPWgdq7yJTEdRTQzrRCvAQ15UrYHC` | **rescue**: one buy at one price; **0.1 NEAR sent back** |
+| Collect | ani, budi, cici | `36kZ1KhwnrrFZUzLKqiALAmXk31j7c2r9T62QAUzZVWH`, `5WCSvu578QZL33vEKtfgPQeFJpux25fZVyxY1ARFnEaT`, `3VCbMyC1aNiUYeTofAcKGeuAoXpPVRCzGFUzb2nfEF2S` | the coin is alive again, the crew holds the rescue tokens |
+
 ### The demo run, on chain
 
-Recorded in the demo video. Coin `$PILOT`, demo time 10 s per day.
+Recorded in the demo video, on the first factory (`factory.ejecto.testnet`, coin code v1, now an archive). Coin `$PILOT`, demo time 10 s per day.
 
 | Step | Account | Transaction | Result |
 |---|---|---|---|
@@ -173,8 +196,8 @@ Open http://localhost:3000. It talks to the deployed testnet factory by default 
 
 ```bash
 cd contracts
-cargo test -p ejecto-coin          # see: test result: ok. 71 passed
-cargo test -p ejecto-factory --lib # see: test result: ok. 15 passed
+cargo test -p ejecto-coin          # see: test result: ok. 100 passed
+cargo test -p ejecto-factory --lib # see: test result: ok. 18 passed
 ```
 
 ### Sandbox integration tests (real wasm in a local NEAR sandbox)
@@ -186,16 +209,18 @@ cargo test --test integration -- --test-threads=1
 # see: launch_is_keyless_and_full_lifecycle_works ... ok
 #      launch_with_low_deposit_fails ... ok
 #      excess_launch_deposit_comes_back ... ok
+#      mayday_rescue_with_ten_pledgers_and_locked_time_weight ... ok
+#      frozen_factory_rejects_new_code_but_still_launches ... ok
 ```
 
-The first run downloads the sandbox binary. The lifecycle test launches a coin through the factory, checks it has no keys, buys from several accounts, ejects and claims.
+The first run downloads the sandbox binary. The lifecycle test launches a coin through the factory, checks it has no keys, buys from several accounts, ejects and claims. The Mayday test lets the coin die, opens a Mayday, has ten accounts pledge (the last one gets the part above the target back), and collects; the last pledge plus the rescue costs 4.2 Tgas.
 
 ### Reproducible build (matches the deployed code)
 
 ```bash
 export TMPDIR=$HOME/.cache/cargo-near-tmp   # needed with Colima on macOS
 cd contracts/coin && cargo near build reproducible-wasm
-# see: SHA-256 checksum hex : 4069f17ff98bc10c1d9b8f06a56af04199eef50755efa0936c5b22d262e391ae
+# see (at commit 31bfad3): SHA-256 checksum hex : b562658a418490b45e41eafca156ffe557d6a2fe70a4b33cd847fb05f1023d8a
 ```
 
 Needs Docker. Details in `docs/build-and-deploy.md`.
@@ -269,7 +294,27 @@ What this says, in the model:
 - The net rule does not stop the patient version. That one is a whale who buys big and dumps 14 days later, which hurts holders on any bonding curve, with or without Ejecto.
 - The net rule also makes dying coins live 4 days longer and gives back a little of the loss reduction.
 
-So the contract keeps the gross-buys peak (decision D-034). The model has no coin with a long life, so the cost of ejecting a coin that a community still wanted is not measured; that is why the issue stays listed as medium.
+So the contract keeps the gross-buys peak (decision D-034).
+
+#### The Mayday rescue, simulated before it was built
+
+Each holder still aboard when the coin becomes ejectable pledges half of what they first put in, with probability 0.3; the target is 2x the alive line. Same agents and seeds as above, 300 coins:
+
+```bash
+node sim/mayday-experiment.mjs sim/out   # about 40 s, writes sim/out/mayday.json
+```
+
+| | No Mayday | Mayday, no new demand | Mayday, 40 newcomers after a rescue |
+|---|---|---|---|
+| Coins rescued | | 18.3% | 18.3% |
+| Losses per coin (NEAR) | 347.0 | 351.6 (+1.3%) | 343.0 (-1.2%) |
+| Traders wiped out | 0% | 0% | 0% |
+| A pledger against not pledging | | -0.45 NEAR | -0.08 NEAR |
+| Rescue and dump (20 NEAR pledged to every Mayday, sold at once) | | **attacker loses 11.4 NEAR** | |
+
+The Mayday does not hurt the main result, and it lets a community keep a coin it still wants. It is not a profit trade: without new buyers a rescuer pays to keep the coin alive, which is why it is a choice and why a failed rescue refunds everything.
+
+**What a review changed.** The first version (coin code v2) let the fund co-invest 25% of the pledges. A code review found that a lone rescuer could open a Mayday, collect and sell at once, for a profit paid by the fund whenever the fund was large (+2.44 NEAR on a 7 NEAR fund, confirmed by a unit test); the model had missed it because its coins have small funds. Coin code v3 spends nothing from the fund: a pledge earns loyalty weight for the time it was locked, paid only at EJECT and lost on a sell, and a pledge never buys more than the target. The v2 coins stay on chain under `coins.ejecto.testnet` as an archive (decision D-039).
 
 ---
 
@@ -278,18 +323,19 @@ So the contract keeps the gross-buys peak (decision D-034). The model has no coi
 ```
 user + wallet ──► static web app (Next.js export, Vercel) ──► public NEAR RPC
                                                          │
-                       factory.ejecto.testnet ───────────┤ create_coin: new keyless sub-account
+                         fleet.ejecto.testnet ───────────┤ create_coin: new keyless sub-account
                                                          │
-                       <symbol>.factory.ejecto.testnet   │ NEP-141 coin + curve + fund + EJECT + claim
+                         <symbol>.fleet.ejecto.testnet   │ NEP-141 coin + curve + fund + Mayday + EJECT + claim
 ```
 
 | Path | What |
 |---|---|
-| `contracts/coin` | Coin contract: NEP-141, bonding curve, Ejecto Fund, alive detector, EJECT, claim. No owner methods. |
-| `contracts/factory` | Factory: stores the coin code, launches keyless coins, registry, refunds of failed launches. |
+| `contracts/coin` | Coin contract: NEP-141, bonding curve, Ejecto Fund, alive detector, Mayday rescue with escrow, EJECT, claim. No owner methods. |
+| `contracts/factory` | Factory: stores the coin code, launches keyless coins, registry, refunds of failed launches, `freeze()`. |
+| `scripts/verify-chain.mjs` | Keyless chain check of every coin, for the live and the archived factories. |
 | `web` | Next.js static app: landing, Coins, Coin, Launch, My seats. NEAR Connect wallet, RPC reads, no backend. |
 | `sim` | The simulation behind the economics. |
-| `docs` | Product spec, architecture, decisions, progress, research. |
+| `docs` | Mechanism note, product spec, architecture, decisions, progress, research. |
 
 CI (`.github/workflows/ci.yml`) runs the unit tests, the sandbox tests and the web lint, type check and build on every push.
 
@@ -305,14 +351,17 @@ Ejecto does not need identities. Its payouts are linear, so splitting money acro
 | Sell almost everything and keep dust to keep the weight | Weight is cut in proportion to what is sold; a full exit forfeits it. | `keeping_dust_does_not_keep_the_weight`, `full_exit_forfeits_weight` |
 | Wash trade to pump volume or the fund | Every round trip pays about 4% in fees; at least 85% of that goes to the fund for the other holders, and the washer never earns weight. | `wash_trading_mostly_feeds_the_fund` |
 | Abuse an `ft_transfer_call` refund to drain someone's basis | Only the part the receiver kept is booked, from the sender's own basis. | `refund_cannot_drain_a_victims_basis` |
-| Break conservation with random operations | Random buys, sells, transfers, EJECT and claims never create or lose a yoctoNEAR. | `random_trades_conserve_every_yocto`, `random_ops_keep_all_invariants` |
+| Rescue a coin alone and dump it | The rescue is an ordinary buy at the batch price and the fund pays nothing, so a dump just pays the fees. | `rescue_and_dump_loses_money_with_a_large_fund`; simulation: the attacker loses 11.4 of 20 NEAR |
+| Self-rescue in one call to collect loyalty | Pledges earn weight only for the time they were really locked; an instant solo rescue earns none. | `an_instant_solo_rescue_earns_no_extra_weight` |
+| Break conservation with random operations | Random buys, sells, transfers, Maydays, pledges, refunds, EJECT and claims never create or lose a yoctoNEAR. | `random_trades_conserve_every_yocto`, `random_ops_keep_all_invariants`, `random_ops_with_maydays_keep_all_invariants` |
 
 The limits, plainly:
 
 - **No one-person-one-share.** A farm of accounts gets nothing extra, but Ejecto also does not reward being many people. Shares follow money and time.
 - **Early buyers are favored.** They got more tokens per NEAR on the curve, so the pro-rata reserve split favors them, and late buyers can still lose part of their money. There is no premine or creator allocation, so the creator is only early if they buy early, on the same curve as everyone.
 - **A rich holder can postpone EJECT** by buying at least the alive line (1 NEAR or 5% of the best window) every 14 days. Those buys pay fees into the fund for everyone.
-- **Peak inflation griefing** (medium, known): a large buy followed by a sell raises the best window, so an active coin can be pushed under 5% of a fake peak 14 days later and ejected a few days early. Nobody can steal anything: holders still get the fair pro-rata exit. We simulated it and a fix for it, see [Tested alternative: a net-buys peak](#tested-alternative-a-net-buys-peak).
+- **Peak inflation griefing** (medium, known): a large buy followed by a sell raises the best window, so an active coin can be pushed under 5% of a fake peak 14 days later and ejected a few days early. Nobody can steal anything: holders still get the fair pro-rata exit. We simulated it and a fix for it, see [Tested alternative: a net-buys peak](#tested-alternative-a-net-buys-peak). A Mayday cannot undo it either, because the fake peak raises the target too.
+- **A rescue can be sandwiched** (low): whoever sends the pledge that completes the target can buy just before it. They gain only from the pledgers' own price impact and pay about 4% in fees, and the 3x target cap bounds it.
 - The full list is under [Known issues in `docs/progress.md`](docs/progress.md).
 
 ## Built for the crew
@@ -322,6 +371,7 @@ A memecoin is a community with a price. Ejecto turns the community's loyalty int
 - **The fund pays loyalty, not size.** Every trade feeds the Ejecto Fund, and at EJECT it is split by net NEAR at risk times time held. Staying with your community is what earns it.
 - **The Crew board** on every coin ranks the holders by that loyalty, read live from the contract, like a high score.
 - **One fair ending for everyone.** When the coin dies there is no race that rewards bots and insiders: the whole crew exits together, and anyone can pull the handle for everyone.
+- **Or a second life, decided together.** A Mayday is the crew's vote with money: everyone pledges, the rescue happens only if enough of them believe, and nobody loses anything if they do not. Rescuers are marked on the Crew board.
 - **Share the outcome.** "Share my seat" and "Share my parachute" post what a seat pays, or what a claim paid, to X with a link to the coin.
 
 ## Ejecto and meme.cooking
@@ -344,15 +394,17 @@ They do not compete: meme.cooking makes sure a launch is not rigged, Ejecto make
 | Rug-proof launchpads (locked liquidity, no mint, fee caps) | They stop the creator from stealing, but the coin still dies and holders still race. | Keyless and rule-locked too, and it also gives the coin a fair ending. |
 | Reflection or dividend tokens | Fees are paid by balance, so a whale who buys late collects, and there is no end state. | The fund is paid by net NEAR at risk times time held, so a late whale earns almost nothing. |
 | Exit queues or gates in a crash | Someone is paid first and someone waits, so the order still decides who loses. | There is no order: every holder claims from the same frozen reserve and fund. |
+| Community buybacks | A treasury or a few whales buy, and whoever sells into the buyback wins. | A Mayday is all-or-nothing at one price, paid by the crew itself, refunded in full if it fails, and the fund is never spent. |
 
-Ejecto treats the death of a memecoin as the normal case and designs the ending: an objective death rule (buys over 14 days, no oracle), an action anyone can take (EJECT), and a payout that cannot be won by speed.
+Ejecto treats the death of a memecoin as the normal case and designs the ending: an objective death rule (buys over 14 days, no oracle), an action anyone can take (EJECT), a payout that cannot be won by speed, and a way back (Mayday) that the crew can only take together.
 
 ## Security model and known limits
 
 - Coins are keyless and have no admin path; the only way to change one is not to have deployed it.
-- The **factory** still has an owner (`ejecto.testnet`) during the hackathon, so the coin code for *future* launches can be replaced. Coins already launched are never affected. This would be locked before any mainnet use.
+- The **factory** gets frozen before the submission deadline (`freeze()`: `set_coin_code` fails forever) and its account's key is deleted, so the code of future coins cannot change either. Until then its owner (`ejecto.testnet`) could still replace the code for future launches; coins already launched are never affected. Two earlier factories stay on chain as archives with their immutable coins: `factory.ejecto.testnet` (coin code v1, no Mayday) and `coins.ejecto.testnet` (coin code v2, the Mayday with the fund co-invest that v3 replaced).
 - **Peak inflation griefing** (medium): a large buy followed by a sell raises the peak window, so 14 days later an active coin can fall under 5% of the inflated peak and be ejected early. Nobody can steal anything, since holders get a fair exit. A net-buys peak was simulated as a fix and rejected ([Tested alternative](#tested-alternative-a-net-buys-peak)).
-- Late buyers can still lose part of their money (see the demo run and the simulation).
+- Late buyers can still lose part of their money (see the demo run and the simulation), and without new buyers a rescuer pays to keep the coin alive.
+- **A rescue can be sandwiched** (low): see above.
 - Testnet only. Not audited.
 
 The full review notes are in `docs/progress.md`.
