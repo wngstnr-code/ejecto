@@ -12,7 +12,7 @@ Ejecto is a memecoin launchpad on NEAR where every coin has an ejection seat. Ea
 |---|---|
 | Live app (NEAR testnet) | https://ejecto.vercel.app |
 | Demo video | https://x.com/Dudung_gg/status/2120172645438374353 |
-| Factory contract (source verified) | [`fleet.ejecto.testnet`](https://testnet.nearblocks.io/address/fleet.ejecto.testnet/contract/code) |
+| Factory contract (source verified, frozen, keyless) | [`fleet.ejecto.testnet`](https://testnet.nearblocks.io/address/fleet.ejecto.testnet/contract/code) |
 | A coin rescued by its crew (one failed Mayday, one rescue) | [`phoenix.fleet.ejecto.testnet`](https://ejecto.vercel.app/coin/?id=phoenix.fleet.ejecto.testnet) |
 | Mechanism note, every claim mapped to its test | [`docs/mechanism.md`](docs/mechanism.md) |
 | Track | Memecoins With Mechanics |
@@ -38,7 +38,7 @@ All of it lives in the coin contract (`contracts/coin`). There is no backend.
    - a **reserve share**, pro-rata to their token balance (nobody races to the exit), plus
    - a **fund share**, weighted by **net NEAR at risk multiplied by time held** (loyalty, not size, is rewarded; transfers move basis, not weight).
 6. **Mayday.** A dying coin does not have to end. Anyone can call a Mayday instead of EJECT: for 3 days the crew pledges NEAR toward a target (1x to 3x the alive line). If the target is reached, all pledges buy in together at **one price** and the coin is alive again. If not, **every pledge comes back in full**. The fund spends nothing; a pledge is capital at risk, so it earns loyalty weight for the time it was locked, exactly like holding.
-7. **Keyless and fixed.** The factory creates each coin as `<symbol>.fleet.ejecto.testnet` with **no access keys** and the contract has **no owner methods**. Every parameter is locked at launch. Before the submission deadline the factory is frozen and its key deleted, so nobody can change the code of future coins either.
+7. **Keyless and fixed.** The factory creates each coin as `<symbol>.fleet.ejecto.testnet` with **no access keys** and the contract has **no owner methods**. Every parameter is locked at launch, and the factory itself is frozen and has no key, so nobody can change the code of future coins either.
 
 Late buyers can still lose some money: early buyers got more tokens per NEAR, so the pro-rata split favors them. What Ejecto removes is the exit race and total wipeouts, and it pays loyalty. The people it protects most are the ones who would lose the race: in the model, 24.8% of the last quarter of holders to sell are wiped out in an exit race, and none with Ejecto ([Simulation](#simulation)).
 
@@ -50,7 +50,7 @@ Ejecto leans on things NEAR has at the protocol level. Each row says what it is 
 |---|---|---|
 | **An account per contract, keys per account** | Every coin is its own named account, `<symbol>.fleet.ejecto.testnet`, created with **no access key**. With no key, nobody can sign for the account, so nobody can redeploy, upgrade or drain it: "no rug" is a property of the account, not a promise. | `near account list-keys jury1.fleet.ejecto.testnet network-config testnet now` shows an empty table |
 | **Atomic batch actions** | The factory launches a coin in one batch: create the account, fund it, deploy the code, call `new`. If any step fails the whole batch reverts, so a half-made coin with a key can never exist. | [`create_coin`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/factory/src/lib.rs#L148) and the sandbox test `launch_is_keyless_and_full_lifecycle_works` |
-| **Frozen factory, then no key** | The factory stores the one verified coin code. `freeze()` makes `set_coin_code` fail forever and the factory account's own key is deleted before the deadline, so the code of *future* coins cannot change either. | `get_config` on `fleet.ejecto.testnet` shows the code hash (and `"frozen": true` once frozen) |
+| **Frozen factory, then no key** | The factory stores the one verified coin code. `freeze()` made `set_coin_code` fail forever and the factory account's own key was deleted, so the code of *future* coins cannot change either. | `get_config` on `fleet.ejecto.testnet` shows the code hash and `"frozen": true`; `list-keys` shows no key |
 | **Storage staking** | A coin pays for its own state out of the launch deposit (code size times the storage price plus 0.3 NEAR, 2.95 NEAR today), and each holder's entry is paid by NEP-145 `storage_deposit`. Nothing has rent that can run out and nobody has to keep a server paid. | `verify-chain` checks that every coin's balance covers reserve, fund, protocol fees, held pledges **and** storage |
 | **Cheap, predictable gas** | Every method is O(1): no loop over holders or pledgers. A Mayday rescue with any number of pledgers costs 4.2 Tgas (about 0.0004 NEAR); EJECT costs 1.9 Tgas. That is what makes "anyone can pull the handle" and a crowd rescue practical. | Gas printed by the sandbox tests (`cargo test --test integration -- --nocapture`) |
 | **Promise-based transfers** | Payouts (sell, claim, refunds of pledges) are plain transfers sent after the state is final, so a failed or delayed transfer can never leave the books half-updated. | `sell`, `claim`, `withdraw_pledge` in [`lib.rs`](https://github.com/wngstnr-code/ejecto/blob/31bfad3/contracts/coin/src/lib.rs) |
@@ -71,7 +71,7 @@ The fastest way to see the mechanic is [Judge it in 60 seconds](#judge-it-in-60-
 | Design | A static app with five pages (landing, Coins, Coin, Launch, My seats), phone ready. The coin page shows the engine (14-day buys against the alive line), the price history rebuilt from chain, the curve, the Mayday panels (call, pledge with a live countdown, collect or withdraw), the eject record, the **Crew** board (holders ranked by loyalty, a **Longest seat** high score, rescuer badges) and an on-chain log of every action. Holders can share their seat or their parachute on X. |
 | Impact | The loyal holders are the ones who lose the most when a memecoin dies. In the 500-coin simulation, the last quarter of holders to sell in an exit race get **0.46 NEAR back per NEAR and 24.8% of them are wiped out**; with Ejecto the same people get **0.55 back and none are wiped out**. Across all traders the share wiped out goes from 4.37% to 0% and losses per coin fall 10.8% ([Simulation](#simulation)). The recorded testnet run shows the same on real transactions ([The demo run, on chain](#the-demo-run-on-chain)). |
 | Originality | The ending is the feature: one EJECT moment where everybody exits together, a fund that pays loyalty, and a Mayday ritual where the crew decides together whether the coin lives on. See [How Ejecto differs](#how-ejecto-differs). |
-| Sustainability | Coins have no access keys and no owner methods, every parameter is set once in `new`, anyone can call `eject` or `mayday`, and there is no backend to switch off. Before the submission deadline the factory is frozen and its key deleted, so not even the team can change the code of future coins ([Security model](#security-model-and-known-limits)). |
+| Sustainability | Coins have no access keys and no owner methods, every parameter is set once in `new`, anyone can call `eject` or `mayday`, and there is no backend to switch off. The factory is frozen and keyless too, so not even the team can change the code of future coins ([Security model](#security-model-and-known-limits)). |
 
 ### Against the track prompt
 
@@ -124,6 +124,8 @@ One command, Node 22+ only (no dependencies, no keys, public RPC):
 node scripts/verify-chain.mjs
 # see, for the factory and for every coin it launched:
 #   ok    0 access keys
+#   ok    factory is frozen: the coin code can never change
+#   ok    factory account has 0 access keys
 #   ok    deployed code is the verified code  (b562658a4184)
 #   ok    reserve equals R(supply) exactly            (coins still trading)
 #   ok    claims paid out no more than the frozen reserve + fund   (ejected coins)
@@ -131,7 +133,7 @@ node scripts/verify-chain.mjs
 # All checks passed.
 ```
 
-It checks spec invariants 1, 2, 4, 5 and 7 from outside the contract: no keys, the verified code hash, the reserve on the exact integer curve, the balance covering reserve, fund, protocol fees, held Mayday pledges and storage, and claims within the frozen pot. `node scripts/verify-chain.mjs coins.ejecto.testnet` and `... factory.ejecto.testnet` check the two archived factories the same way. The [chain check](.github/workflows/chain.yml) workflow runs it against testnet every 6 hours.
+It checks spec invariants 1, 2, 4, 5 and 7 from outside the contract: a frozen factory with no keys, coins with no keys, the verified code hash, the reserve on the exact integer curve, the balance covering reserve, fund, protocol fees, held Mayday pledges and storage, and claims within the frozen pot. `node scripts/verify-chain.mjs coins.ejecto.testnet` and `... factory.ejecto.testnet` check the two archived factories the same way. The [chain check](.github/workflows/chain.yml) workflow runs it against testnet every 6 hours.
 
 Or check single facts with [near-cli-rs](https://github.com/near/near-cli-rs):
 
@@ -144,10 +146,13 @@ near account list-keys phoenix.fleet.ejecto.testnet network-config testnet now
 near contract call-function as-read-only phoenix.fleet.ejecto.testnet status json-args '{}' network-config testnet now
 # see: "rescues": 1, "mayday": null, "pledges_held": "0"
 
-# the factory stores the verified coin code
+# the factory stores the verified coin code and is frozen
 near contract call-function as-read-only fleet.ejecto.testnet get_config json-args '{}' network-config testnet now
-# see: "coin_code_hash": "b562658a418490b45e41eafca156ffe557d6a2fe70a4b33cd847fb05f1023d8a"
-#      and, once frozen before the deadline, "frozen": true
+# see: "coin_code_hash": "b562658a418490b45e41eafca156ffe557d6a2fe70a4b33cd847fb05f1023d8a", "frozen": true
+
+# nobody holds a key to the factory either
+near account list-keys fleet.ejecto.testnet network-config testnet now
+# see: an empty table
 ```
 
 The contract tab on NearBlocks shows **Contract Source Code Verified** for the factory and for every coin.
@@ -411,7 +416,7 @@ Ejecto treats the death of a memecoin as the normal case and designs the ending:
 ## Security model and known limits
 
 - Coins are keyless and have no admin path; the only way to change one is not to have deployed it.
-- The **factory** gets frozen before the submission deadline (`freeze()`: `set_coin_code` fails forever) and its account's key is deleted, so the code of future coins cannot change either. Until then its owner (`ejecto.testnet`) could still replace the code for future launches; coins already launched are never affected. Two earlier factories stay on chain as archives with their immutable coins: `factory.ejecto.testnet` (coin code v1, no Mayday) and `coins.ejecto.testnet` (coin code v2, the Mayday with the fund co-invest that v3 replaced).
+- The **factory** is frozen (`freeze()`, tx `8ETkUY26JiNWuMGSGryVpYdmMfVDediafFxCTt8rDETo`: `set_coin_code` fails forever) and its account has no access keys, so the code of future coins cannot change either. `verify-chain` checks both. Two earlier factories stay on chain as archives with their immutable coins: `factory.ejecto.testnet` (coin code v1, no Mayday) and `coins.ejecto.testnet` (coin code v2, the Mayday with the fund co-invest that v3 replaced).
 - **Peak inflation griefing** (medium): a large buy followed by a sell raises the peak window, so 14 days later an active coin can fall under 5% of the inflated peak and be ejected early. Nobody can steal anything, since holders get a fair exit. A net-buys peak was simulated as a fix and rejected ([Tested alternative](#tested-alternative-a-net-buys-peak)).
 - Late buyers can still lose part of their money (see the demo run and the simulation), and without new buyers a rescuer pays to keep the coin alive.
 - **A rescue can be sandwiched** (low): see above.
