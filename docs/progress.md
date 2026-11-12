@@ -6,7 +6,7 @@ Update this file at the end of every session and after every milestone. Newest e
 
 | Item | Value |
 |---|---|
-| Phase | Done and frozen: factory keyless, final demo video posted on X (https://x.com/Dudung_gg/status/2120827304754766145), competitors rechecked. Next: the user submits the form |
+| Phase | Done and frozen: factory keyless, final demo video posted on X (https://x.com/Dudung_gg/status/2120827304754766145), competitors rechecked, form submitted on 2026-11-12 (listed in the public API, track memecoins). Next: keep the repo, the post and the testnet coins as they are until results on 2026-11-18 |
 | Overall | Review of stages 1 to 4 found a fund drain in the v2 Mayday (co-invest); fixed in coin code v3 (locked-time pledge weight). 100 coin unit tests, 18 factory unit tests, 5 sandbox tests. Chain check covers all three factories. |
 | Deadline | 2026-11-14 23:59 UTC (2026-11-15 06:59 WIB) |
 | Days left | 3.5 (as of 2026-11-11) |
