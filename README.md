@@ -4,7 +4,7 @@
 
 **Every memecoin needs an ejecto seato.**
 
-> **TL;DR.** Memecoins die, and when they do the holders race for the exit and the last ones out lose everything. On Ejecto the meme does something about it: every coin carries a fund that its trades fill, a death rule written in its keyless contract, and an ejection seat anyone can pull. When the coin dies, the whole crew exits together at one fair split and the fund pays the most loyal. If the crew still believes, it can call a **Mayday** and buy the coin back to life together, and nobody loses a cent if the rescue fails. In the model, the race losers go from **24.8% wiped out to 0%**. [Judge it in 60 seconds](#judge-it-in-60-seconds), or check everything without a wallet with `node scripts/verify-chain.mjs`.
+> **TL;DR.** Memecoins die, and when they do the holders race for the exit and the last ones out lose almost everything. On Ejecto the meme does something about it: every coin carries a fund that its trades fill, a death rule written in its keyless contract, and an ejection seat anyone can pull. When the coin dies, the whole crew exits together at one fair split and the fund pays the most loyal. If the crew still believes, it can call a **Mayday** and buy the coin back to life together, and nobody loses a cent if the rescue fails. In the model, the race losers go from **24.8% wiped out to 0%**. [Judge it in 60 seconds](#judge-it-in-60-seconds), or check everything without a wallet with `node scripts/verify-chain.mjs`.
 
 Ejecto is a memecoin launchpad on NEAR where every coin has an ejection seat. Each coin trades on a bonding curve inside its own keyless contract, and a small part of every trade goes into the **Ejecto Fund**. When the coin dies, anyone can press **EJECT**: trading stops forever and every holder claims a fair share of the reserve plus a loyalty share of the fund. No exit race, no total wipeout, no admin.
 
@@ -16,6 +16,7 @@ Ejecto is a memecoin launchpad on NEAR where every coin has an ejection seat. Ea
 | A coin rescued by its crew (one failed Mayday, one rescue) | [`phoenix.fleet.ejecto.testnet`](https://ejecto.vercel.app/coin/?id=phoenix.fleet.ejecto.testnet) |
 | Mechanism note, every claim mapped to its test | [`docs/mechanism.md`](docs/mechanism.md) |
 | Track | Memecoins With Mechanics |
+| Check it without a wallet | [Four commands](#for-judges): the chain check (about 5 s), the contract tests and the simulations, each with the output to expect |
 | Judge it in 60 seconds | Seven Jury Seats, one per judge, are parked ready to EJECT: [buy, eject, claim, or call a Mayday](#judge-it-in-60-seconds) with your own testnet wallet |
 
 Built at NEAR HACKATHON 2026.
@@ -24,7 +25,7 @@ Built at NEAR HACKATHON 2026.
 
 ## The problem
 
-About two thirds of memecoins stop trading within a day. When a coin dies, holders race to sell into a falling curve: the fastest sellers get something, the last ones get almost nothing. The most loyal holders lose the most, and the fees they paid never come back to them.
+About two thirds of memecoins stop trading within a day ([CoinGecko: 67% of Pump.fun tokens fail within 24 hours](https://blockchain.news/news/pump-fun-memecoins-lifespan-study)). When a coin dies, holders race to sell into a falling curve: the fastest sellers get something, the last ones get almost nothing. The most loyal holders lose the most, and the fees they paid never come back to them.
 
 ## The mechanic
 
@@ -64,6 +65,15 @@ There is no backend: the web app is a static site that reads contract views over
 ## For judges
 
 The fastest way to see the mechanic is [Judge it in 60 seconds](#judge-it-in-60-seconds): seven coins are parked ready to EJECT, so you can buy, eject and claim (or rescue) with your own wallet. Every claim below is mapped to the test that proves it in [`docs/mechanism.md`](docs/mechanism.md). The fastest way to check the claims below without a wallet is `node scripts/verify-chain.mjs`.
+
+**No wallet? Four commands check the whole claim from a fresh clone** (Node 22+, Rust stable; run each from the repo root):
+
+| # | Do | See |
+|---|---|---|
+| 1 | `node scripts/verify-chain.mjs` (about 5 s) | `All checks passed.`: frozen factory with 0 keys, every coin with 0 keys and the verified code, reserves on the curve, claims within the frozen pot |
+| 2 | `cd contracts && cargo test -p ejecto-coin && cargo test -p ejecto-factory --lib` | `test result: ok. 100 passed`, then `test result: ok. 18 passed` |
+| 3 | `node sim/ejecto-sim.mjs sim/out && node sim/at-death.mjs sim/out` (about 15 s) | Under `"summary"`: `"wipedPct"` 4.37 (exit race) and 0 (Ejecto), `"lossReductionPct"` 10.78 (the `"sens"` block printed first is the fee table, 200 coins per preset). Then the table: the last quarter to sell, wiped out % 24.8 and 0 |
+| 4 | `node sim/mayday-experiment.mjs sim/out` (about 20 s) | Rescue and dump: `attacker: -11.43 NEAR net per coin rescued` |
 
 | Criterion | Where it is answered |
 |---|---|
@@ -253,7 +263,7 @@ Needs Docker. Details in `docs/build-and-deploy.md`.
 node sim/ejecto-sim.mjs sim/out
 ```
 
-An agent-based model (zero dependencies): 500 coins, 400 traders each, 60 days, the same traders and random draws with and without Ejecto. It writes `sim/out/ejecto-results.json` and the series behind the charts below (`node sim/readme-charts.mjs sim/out docs/img` redraws them). Results (standard fees):
+An agent-based model (zero dependencies): 500 coins, 400 traders each, 60 days, the same traders and random draws with and without Ejecto. It prints and writes `sim/out/ejecto-results.json`: the headline numbers are under `summary` (500 coins); `sens` is the fee table (200 coins per preset, so its numbers differ slightly). It also writes the series behind the charts below (`node sim/readme-charts.mjs sim/out docs/img` redraws them). Results (standard fees):
 
 | | Exit race | Ejecto |
 |---|---|---|
@@ -321,7 +331,7 @@ So the contract keeps the gross-buys peak (decision D-034).
 Each holder still aboard when the coin becomes ejectable pledges half of what they first put in, with probability 0.3; the target is 2x the alive line. Same agents and seeds as above, 300 coins:
 
 ```bash
-node sim/mayday-experiment.mjs sim/out   # about 40 s, writes sim/out/mayday.json
+node sim/mayday-experiment.mjs sim/out   # about 20 s, writes sim/out/mayday.json
 ```
 
 | | No Mayday | Mayday, no new demand | Mayday, 40 newcomers after a rescue |
@@ -413,6 +423,7 @@ They do not compete: meme.cooking makes sure a launch is not rigged, Ejecto make
 | Standard bonding-curve launchpads | An exit race: the fastest sellers get the best price, the last get almost nothing, and the fees went to the platform. | No race: one snapshot, everyone exits pro-rata at the same moment. |
 | Rug-proof launchpads (locked liquidity, no mint, fee caps) | They stop the creator from stealing, but the coin still dies and holders still race. | Keyless and rule-locked too, and it also gives the coin a fair ending. |
 | Reflection or dividend tokens | Fees are paid by balance, so a whale who buys late collects, and there is no end state. | The fund is paid by net NEAR at risk times time held, so a late whale earns almost nothing. |
+| Death-timer coins (the coin dies when buys stop, holders split the pool) | The race ends too, but the pool is split by balance alone: staying through the slow death earns nothing, and the only way back is to buy more alone. | The same fair split plus a fund weighted by NEAR at risk times time held, an objective death rule against the coin's own peak, and a crowd rescue that refunds in full when it fails. |
 | Exit queues or gates in a crash | Someone is paid first and someone waits, so the order still decides who loses. | There is no order: every holder claims from the same frozen reserve and fund. |
 | Community buybacks | A treasury or a few whales buy, and whoever sells into the buyback wins. | A Mayday is all-or-nothing at one price, paid by the crew itself, refunded in full if it fails, and the fund is never spent. |
 
