@@ -11,7 +11,7 @@ Ejecto is a memecoin launchpad on NEAR where every coin has an ejection seat. Ea
 | | |
 |---|---|
 | Live app (NEAR testnet) | https://ejecto.vercel.app |
-| Demo video | https://x.com/Dudung_gg/status/2120481271784824863 |
+| Demo video | https://x.com/Dudung_gg/status/2120827304754766145 |
 | Factory contract (source verified, frozen, keyless) | [`fleet.ejecto.testnet`](https://testnet.nearblocks.io/address/fleet.ejecto.testnet/contract/code) |
 | A coin rescued by its crew (one failed Mayday, one rescue) | [`phoenix.fleet.ejecto.testnet`](https://ejecto.vercel.app/coin/?id=phoenix.fleet.ejecto.testnet) |
 | Mechanism note, every claim mapped to its test | [`docs/mechanism.md`](docs/mechanism.md) |
@@ -174,7 +174,7 @@ Coin `$PHOENIX` on the live factory, demo time 10 s per day.
 
 ### The demo run, on chain
 
-Recorded in the [demo video](https://x.com/Dudung_gg/status/2120481271784824863), on the live factory (`fleet.ejecto.testnet`, coin code v3). Coin Mayday Moon (`$MOON`, `moon.fleet.ejecto.testnet`), demo time 10 s per day. The coin dies, the crew rescues it with a Mayday, it dies again, and then it is ejected.
+Recorded in the [demo video](https://x.com/Dudung_gg/status/2120827304754766145), on the live factory (`fleet.ejecto.testnet`, coin code v3). Coin Mayday Moon (`$MOON`, `moon.fleet.ejecto.testnet`), demo time 10 s per day. The coin dies, the crew rescues it with a Mayday, it dies again, and then it is ejected.
 
 | Step | Account | Transaction | Result |
 |---|---|---|---|
